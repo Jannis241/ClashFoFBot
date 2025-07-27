@@ -3,4 +3,6 @@ fn main() {
     println!("anders");
 }
 
+fn AAAAL() {}
+
 fn fufu() {}
