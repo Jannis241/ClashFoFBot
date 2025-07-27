@@ -4,6 +4,3 @@ fn main() {
 }
 
 fn fufu() {}
-fn FOFOFOFOF() {
-    "so ein FOFOFOFOFOF"
-}
