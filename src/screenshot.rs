@@ -1,35 +1,47 @@
 use crate::prelude::*;
 
-pub fn get_screenshot() -> (Vec<u8>, usize, usize) {
-    // Hole das primäre Display
-    let display = loop {
-        if let Ok(display) = Display::primary() {
-            break display;
-        }
-        eprintln!("Warte auf Display...");
-        thread::sleep(Duration::from_millis(100));
-    };
+pub struct Screenshot {
+    pub data: Vec<u8>,
+    pub width: usize,
+    pub height: usize,
+}
 
-    // Starte den Capturer
-    let mut capturer = loop {
-        if let Ok(capturer) = Capturer::new(display.clone()) {
-            break capturer;
-        }
-        eprintln!("Warte auf Capturer...");
-        thread::sleep(Duration::from_millis(100));
-    };
+impl Screenshot {
+    pub fn get_screenshot() -> Screenshot {
+        // Hole das primäre Display
 
-    let (width, height) = (capturer.width(), capturer.height());
-
-    // Hole das Frame
-    let frame = loop {
-        match capturer.frame() {
-            Ok(frame) => break frame.to_vec(),
-            Err(_) => {
-                thread::sleep(Duration::from_millis(10));
+        // Starte den Capturer
+        let mut capturer = loop {
+            let display = loop {
+                if let Ok(display) = Display::primary() {
+                    break display;
+                }
+                eprintln!("Warte auf Display...");
+                thread::sleep(Duration::from_millis(100));
+            };
+            if let Ok(capturer) = Capturer::new(display) {
+                break capturer;
             }
-        }
-    };
+            eprintln!("Warte auf Capturer...");
+            thread::sleep(Duration::from_millis(100));
+        };
 
-    (frame, width, height)
+        let (width, height) = (capturer.width(), capturer.height());
+
+        // Hole das Frame
+        let frame = loop {
+            match capturer.frame() {
+                Ok(frame) => break frame.to_vec(),
+                Err(_) => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+            }
+        };
+
+        return Screenshot {
+            data: frame,
+            width: width,
+            height: height,
+        };
+    }
 }
