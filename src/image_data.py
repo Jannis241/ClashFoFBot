@@ -1,5 +1,9 @@
 import json
+from logging import raiseExceptions
 import os
+from ultralytics import YOLO
+
+data=[]
 
 def write_data(data):
     file_path = "Communication/data.json"
@@ -12,26 +16,34 @@ def write_data(data):
 
 
 
-data = []
+DATA_YAML = "dataset/data.yaml"
+BEST_MODEL_PATH = 'runs/train/exp/weights/best.pt'
 
 
-from ultralytics import YOLO
+def train_new_model(epochs: int = 50):
+    model = YOLO('yolov8n.pt')
+    model.train(data=DATA_YAML, epochs=epochs)
+    print("Training abgeschlossen. Das beste Modell findest du unter 'runs/train/exp/weights/best.pt'")
 
-model = YOLO('yolov8n.yaml')
 
-model.train(
-    data='dataset/data.yaml',
-    epochs=30,
-    imgsz=640,
-    batch=8
-)
+def continue_training(model_path=BEST_MODEL_PATH, epochs: int = 50):
+    if not os.path.exists(model_path):
+        print("Model path not found. In get_prediction()")
+        return
 
-model.val()
+    model = YOLO(BEST_MODEL_PATH)
+    model.train(data=DATA_YAML, epochs=epochs)
 
-best_model = YOLO('runs/detect/train/weights/best.pt')
-results = best_model('Communication/screenshot.png', show=True)
+    print("Weitertraining abgeschlossen.")
 
-print(results)
+
+def get_prediction(image_path, model_path=BEST_MODEL_PATH):
+    if not os.path.exists(model_path):
+        print("Model path not found. In get_prediction()")
+        return
+    model = YOLO(model_path)
+    results = model.predict(source=image_path)
+    return results
 
 
 write_data(data)

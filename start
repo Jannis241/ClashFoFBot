@@ -1,0 +1,14 @@
+#!/bin/bash
+
+
+set -e
+
+clear
+
+source venv/bin/activate
+
+
+pip3 install -r requirements.txt
+
+
+cargo run
