@@ -8,5 +8,5 @@ mod settings_manager;
 mod ui;
 
 fn main() {
-    run_tests();
+    debug::run_tests();
 }

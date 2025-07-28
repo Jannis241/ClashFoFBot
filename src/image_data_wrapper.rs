@@ -13,9 +13,6 @@ pub struct Building {
 }
 
 pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
-    // Todo:
-    // 1. copy the screenshot to communications / screenshot damit das python script das image
-    // auslesen kann.
     // 2. python script callen
     // 3. python script soll die ergebnisse in data.json speichern
     // 4. ergebnisse hier auslesen5 (nachdem python fertig ist erst)
@@ -27,9 +24,22 @@ pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
     match res {
         Ok(_) => println!("Datei wurde erfolgreich kopiert!"),
         Err(e) => println!(
-            "Error: {}  while trying to copy {:?} to {:?}.",
+            "Error: {}  | Tried to copy {:?} to {:?}.",
             e, screeenshot_path, target
         ),
+    }
+
+    match Command::new("python3").arg("src/image_data.py").output() {
+        Ok(output) if output.status.success() => {
+            println!("image_data.py executed without any problems.");
+        }
+        Ok(output) => {
+            eprintln!("Python error:");
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+        }
+        Err(e) => {
+            eprintln!("Failed to start process: {}", e);
+        }
     }
 
     return vec![];
