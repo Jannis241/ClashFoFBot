@@ -14,7 +14,7 @@ def write_data(data):
 
 IMAGE_PATH = "Communication/screenshot.png"
 DATA_YAML = "dataset/data.yaml"
-BEST_MODEL_PATH = 'runs/train/exp/weights/best.pt'
+BEST_MODEL_PATH = 'runs/detect/train/weights/best.pt'
 
 def create_new_model(epochs: int = 50):
     print("Training new model..")
@@ -22,7 +22,7 @@ def create_new_model(epochs: int = 50):
     model.train(data=DATA_YAML, epochs=epochs)
     print("Training abgeschlossen. Das beste Modell findest du unter 'runs/train/exp/weights/best.pt'")
 
-def continue_training(model_path=BEST_MODEL_PATH, epochs: int = 1):
+def continue_training(model_path=BEST_MODEL_PATH, epochs: int = 50):
     if not os.path.exists(model_path):
         print(f"Modell {model_path} nicht gefunden. Erstelle neues Model und trainiere es.")
         create_new_model(epochs)
@@ -44,27 +44,18 @@ def get_prediction(image_path, model_path=BEST_MODEL_PATH):
 
 parser = argparse.ArgumentParser(description="Trainings- und Vorhersagemodus für YOLO Modell")
 parser.add_argument('--predict', action='store_true', help='Mache eine Vorhersage')
-parser.add_argument('--model-name', type=str, default=BEST_MODEL_PATH, help='Pfad zum Modell für Training oder Prediction')
-parser.add_argument('--train-new', action='store_true', help='Starte ein neues Training')
 parser.add_argument('--continue-train', action='store_true', help='Setze Training fort mit gegebenem Modell')
 parser.add_argument('--epochs', type=int, default=None, help='Anzahl der Trainings-Epochen')
 
 args = parser.parse_args()
 
-# Bestimme Standard-Epochen
-epochs_train_new = 50
-epochs_continue = 1
 
-if args.train_new:
-    ep = args.epochs if args.epochs else epochs_train_new
-    train_new_model(epochs=ep)
 
-elif args.continue_train:
-    ep = args.epochs if args.epochs else epochs_continue
-    continue_training(model_path=args.model_name, epochs=ep)
+if args.continue_train:
+    continue_training(epochs=args.epochs)
 
 if args.predict:
-    pred = get_prediction(IMAGE_PATH, model_path=args.model_name)
+    pred = get_prediction(IMAGE_PATH)
     print("Predictionsergebnis:", pred)
 
 write_data(data)

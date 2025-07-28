@@ -9,11 +9,11 @@ pub fn run_tests() {
         Box::new(|_cc| Ok(Box::new(ui::ScreenshotApp::default()))),
     );
 
-    image_data_wrapper::train_model(1);
+    image_data_wrapper::train_model(10);
 
     let buildings = image_data_wrapper::get_buildings(Path::new("images/fufu.png"));
     println!("Buildings: {:?}", buildings);
 
-    let screenshot = screener::make_screenshot(0);
-    screenshot.save("images/test.png").unwrap()
+    // let screenshot = screener::make_screenshot(0);
+    // screenshot.save("images/test.png").unwrap()
 }
