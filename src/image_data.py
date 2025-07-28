@@ -1,2 +1,33 @@
-for i in range(0,1000):
-    print(i)
+import json
+import os
+
+file_path = "Communication/data.json"
+
+data = [
+    {
+        "class_id": 1,
+        "class_name": "luftabwehr",
+        "confidence": 0.95,
+        "bounding_box": [100.5, 150.0, 200.25, 250.75]
+    },
+    {
+        "class_id": 2,
+        "class_name": "mauer",
+        "confidence": 0.88,
+        "bounding_box": [50.0, 75.5, 120.0, 180.0]
+    },
+    {
+        "class_id": 3,
+        "class_name": "kanone",
+        "confidence": 0.91,
+        "bounding_box": [300.0, 400.0, 450.0, 550.0]
+    }
+]
+
+os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+with open(file_path, 'w', encoding='utf-8') as f:
+    json.dump(data, f, indent=4)
+
+print(f"Daten erfolgreich in {file_path} geschrieben.")
+

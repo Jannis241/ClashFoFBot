@@ -1,6 +1,8 @@
 pub use crate::*;
 pub use eframe;
 pub use scrap::{Capturer, Display};
+pub use serde::Deserialize;
+use serde_json::Result;
 pub use std::fs;
 pub use std::fs::{copy, read_to_string, remove_file, write, File, OpenOptions};
 pub use std::io::{BufReader, BufWriter, Read, Write};

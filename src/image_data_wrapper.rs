@@ -1,19 +1,14 @@
 use crate::prelude::*;
 
-pub struct BoundingBox {
-    pub top_left: (f32, f32),
-    pub top_right: (f32, f32),
-}
-
+#[derive(Debug, Deserialize)]
 pub struct Building {
     pub class_id: i32,
-    pub class_name: i32,
+    pub class_name: String,
     pub confidence: f32,
-    pub bounding_box: BoundingBox,
+    pub bounding_box: (f32, f32, f32, f32),
 }
 
 pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
-    // 2. python script callen
     // 3. python script soll die ergebnisse in data.json speichern
     // 4. ergebnisse hier auslesen5 (nachdem python fertig ist erst)
     // 5. geparste ergebnisse (json zu Vec<Buildings> returnen)
@@ -31,6 +26,7 @@ pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
 
     match Command::new("python3").arg("src/image_data.py").output() {
         Ok(output) if output.status.success() => {
+            println!("{}", String::from_utf8_lossy(&output.stdout));
             println!("image_data.py executed without any problems.");
         }
         Ok(output) => {
@@ -42,5 +38,12 @@ pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
         }
     }
 
-    return vec![];
+    let file = File::open("Communication/data.json").expect("Konnte data.json nicht öffnen");
+
+    let reader = BufReader::new(file);
+
+    let buildings: Vec<Building> =
+        serde_json::from_reader(reader).expect("Error while trying to read from data.json.");
+
+    return buildings;
 }
