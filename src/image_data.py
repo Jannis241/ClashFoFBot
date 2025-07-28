@@ -16,7 +16,7 @@ IMAGE_PATH = "Communication/screenshot.png"
 DATA_YAML = "dataset/data.yaml"
 BEST_MODEL_PATH = 'runs/train/exp/weights/best.pt'
 
-def train_new_model(epochs: int = 50):
+def create_new_model(epochs: int = 50):
     print("Training new model..")
     model = YOLO('yolov8n.pt')
     model.train(data=DATA_YAML, epochs=epochs)
@@ -24,9 +24,8 @@ def train_new_model(epochs: int = 50):
 
 def continue_training(model_path=BEST_MODEL_PATH, epochs: int = 1):
     if not os.path.exists(model_path):
-        print("Kein Modell gefunden. Starte neues Training..")
-        train_new_model(epochs=epochs)
-        return
+        print(f"Modell {model_path} nicht gefunden. Erstelle neues Model und trainiere es.")
+        create_new_model(epochs)
     print("Gefundenes Modell:", model_path)
     print("Setze Training fort..")
     model = YOLO(model_path)
