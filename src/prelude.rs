@@ -6,6 +6,7 @@ pub use eframe::egui;
 pub use image::{io::Reader as ImageReader, ImageBuffer, Rgba, RgbaImage};
 pub use rfd;
 // pub use image::{io::Reader as ImageReader, ImageBuffer, Rgba, RgbaImage};
+pub use chrono::Local;
 pub use screenshots::Screen;
 pub use serde::Deserialize;
 use serde_json::Result;

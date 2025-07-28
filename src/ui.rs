@@ -1,3 +1,5 @@
+use std::os::unix::ffi::OsStrExt;
+
 use eframe::egui::StrokeKind;
 
 use crate::prelude::*;
@@ -38,7 +40,6 @@ pub struct ScreenshotApp {
     labeled_rects: Vec<LabeledRect>,
     current_rect_start: Option<egui::Pos2>,
     current_rect_end: Option<egui::Pos2>,
-    current_label: String,
 }
 
 #[derive(Clone)]
@@ -50,14 +51,13 @@ struct LabeledRect {
 impl Default for ScreenshotApp {
     fn default() -> Self {
         Self {
-            screenshot_path: "screenshot.png".to_string(),
+            screenshot_path: "images".to_string(),
             keybind: "r".to_string(),
             selected_image: None,
             image_folder: None,
             available_images: vec![],
             active_tab: Tab::Settings,
             image_texture: None,
-            current_label: "".to_string(),
             current_rect_end: None,
             current_rect_start: None,
             labeled_rects: vec![],
@@ -69,16 +69,27 @@ impl ScreenshotApp {
     fn update_image_list(&mut self) {
         if let Some(folder) = &self.image_folder {
             if let Ok(entries) = fs::read_dir(folder) {
-                self.available_images = entries
+                let mut images: Vec<_> = entries
                     .filter_map(|entry| entry.ok())
-                    .filter_map(|e| {
-                        let path = e.path();
-                        if path.extension()?.to_str()? == "png" {
-                            Some(path.display().to_string())
-                        } else {
-                            None
-                        }
+                    .filter(|e| {
+                        e.path()
+                            .extension()
+                            .map(|ext| ext == "png")
+                            .unwrap_or(false)
                     })
+                    .collect();
+
+                // Sortiere nach Änderungszeit (neueste zuerst)
+                images.sort_by_key(|e| {
+                    e.metadata()
+                        .and_then(|m| m.modified())
+                        .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                });
+                images.reverse();
+
+                self.available_images = images
+                    .into_iter()
+                    .map(|e| e.path().display().to_string())
                     .collect();
             }
         }
@@ -144,8 +155,16 @@ impl eframe::App for ScreenshotApp {
                         });
 
                         ui.horizontal(|ui| {
-                            ui.label("Speicherpfad:");
-                            ui.text_edit_singleline(&mut self.screenshot_path);
+                            if ui.button("📂 Speicher Ordner wählen").clicked() {
+                                if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                    self.screenshot_path = String::from_utf8(
+                                        path.clone().as_os_str().as_bytes().to_vec(),
+                                    )
+                                    .unwrap();
+                                }
+                            }
+
+                            ui.label(format!("📁 Speicher Ordner: {}", self.screenshot_path));
                         });
 
                         let state = DeviceState::new();
@@ -154,8 +173,18 @@ impl eframe::App for ScreenshotApp {
                             .contains(&keycode_from_str(&self.keybind).unwrap_or(Keycode::V))
                         {
                             println!("took screenshot");
+                            let now = Local::now();
+                            let filename = format!("{}.png", now.format("%Y-%m-%d_%H-%M-%S"));
+
+                            let save_path = Path::new(&self.screenshot_path).join(filename);
+                            if let Err(e) = std::fs::create_dir_all(&self.screenshot_path) {
+                                eprintln!("Fehler beim Erstellen des Ordners: {e}");
+                            }
                             let screen = screener::make_screenshot(0);
-                            screen.save(&Path::new(&self.screenshot_path));
+                            screen.save(&save_path).expect("error while saving img");
+                            println!("📸 Screenshot gespeichert unter: {}", save_path.display());
+
+                            self.update_image_list(); // 👈 Bildliste neu laden
                         }
                     });
 
@@ -203,35 +232,77 @@ impl eframe::App for ScreenshotApp {
 
                         if let Some(texture) = &self.image_texture {
                             // Bild anzeigen
-                            let response = ui.image(texture);
+                            let img_response = ui.image(texture);
 
-                            // Rechteck-Zeichnen
-                            if response.drag_started() {
-                                self.current_rect_start = response.interact_pointer_pos();
-                                self.current_rect_end = self.current_rect_start;
-                            }
-                            if response.dragged() {
-                                self.current_rect_end = response.interact_pointer_pos();
-                            }
-                            if response.drag_stopped() {
-                                if let (Some(start), Some(end)) =
-                                    (self.current_rect_start, self.current_rect_end)
-                                {
-                                    let rect = egui::Rect::from_two_pos(start, end);
-                                    if !self.current_label.is_empty() {
+                            let pointer_pos = ui.input(|i| i.pointer.interact_pos());
+                            let rect = img_response.rect;
+
+                            let cursor_over_image = if let Some(pos) = pointer_pos {
+                                rect.contains(pos)
+                            } else {
+                                false
+                            };
+
+                            if cursor_over_image {
+                                let pointer_down = ui.input(|i| i.pointer.primary_down());
+                                let pointer_clicked = ui.input(|i| i.pointer.primary_clicked());
+                                let pointer_released = ui.input(|i| i.pointer.primary_released());
+
+                                if pointer_clicked {
+                                    dbg!("clicked");
+                                    self.current_rect_start = pointer_pos;
+                                    self.current_rect_end = self.current_rect_start;
+                                }
+                                // Ziehen
+                                if pointer_down {
+                                    dbg!(pointer_pos);
+                                    if self.current_rect_start.is_none() {
+                                        self.current_rect_start = pointer_pos;
+                                    }
+                                    self.current_rect_end = pointer_pos;
+                                }
+                                // Loslassen
+                                if pointer_released {
+                                    dbg!(self.current_rect_start, self.current_rect_end);
+                                    if let (Some(start), Some(end)) =
+                                        (self.current_rect_start, self.current_rect_end)
+                                    {
+                                        let rect = egui::Rect::from_two_pos(start, end).expand(2.0);
                                         self.labeled_rects.push(LabeledRect {
                                             rect,
-                                            label: self.current_label.clone(),
+                                            label: String::new(),
                                         });
-                                        self.current_label.clear();
+
+                                        self.current_rect_end = None;
+                                        self.current_rect_start = None;
                                     }
                                 }
-                                self.current_rect_start = None;
-                                self.current_rect_end = None;
+                            }
+
+                            if self.current_rect_start.is_none() {
+                                if let Some(r) = self.labeled_rects.last_mut() {
+                                    for event in &ctx.input(|i| i.events.clone()) {
+                                        if let egui::Event::Text(text) = event {
+                                            // Text enthält den getippten String (kann auch mehrere Buchstaben sein)
+                                            // Wir hängen ihn an das Label an:
+                                            r.label.push_str(text);
+                                        }
+                                        if let egui::Event::Key {
+                                            key, pressed: true, ..
+                                        } = event
+                                        {
+                                            // Backspace behandeln
+                                            if *key == egui::Key::Backspace {
+                                                r.label.pop();
+                                            }
+                                        }
+                                    }
+                                }
                             }
 
                             // Rechtecke zeichnen
                             let painter = ui.painter();
+                            dbg!(self.labeled_rects.len());
                             for lr in &self.labeled_rects {
                                 painter.rect_stroke(
                                     lr.rect,
@@ -259,11 +330,6 @@ impl eframe::App for ScreenshotApp {
                                     StrokeKind::Middle,
                                 );
                             }
-
-                            ui.horizontal(|ui| {
-                                ui.label("📝 Label:");
-                                ui.text_edit_singleline(&mut self.current_label);
-                            });
                         }
                     } else {
                         ui.label("Kein Bild ausgewählt.");
