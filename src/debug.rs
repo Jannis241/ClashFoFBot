@@ -2,12 +2,7 @@ use crate::prelude::*;
 
 pub fn run_tests() {
     println!("Runnings tests..");
-    let options = eframe::NativeOptions::default();
-    eframe::run_native(
-        "Screenshot Tool",
-        options,
-        Box::new(|_cc| Ok(Box::new(ui::ScreenshotApp::default()))),
-    );
+    ui::start_ui_in_thread();
 
     image_data_wrapper::train_model(10);
 
