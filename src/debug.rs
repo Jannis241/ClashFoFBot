@@ -9,6 +9,8 @@ pub fn run_tests() {
         Box::new(|_cc| Ok(Box::new(ui::ScreenshotApp::default()))),
     );
 
+    image_data_wrapper::train_model(1);
+
     let buildings = image_data_wrapper::get_buildings(Path::new("images/fufu.png"));
     println!("Buildings: {:?}", buildings);
 

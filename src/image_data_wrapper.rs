@@ -8,6 +8,28 @@ pub struct Building {
     pub bounding_box: (f32, f32, f32, f32),
 }
 
+pub fn train_model(epochen: i32) {
+    match Command::new("python3")
+        .arg("src/image_data.py")
+        .arg("--continue-train")
+        .arg("--epochs")
+        .arg(epochen.to_string())
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            println!("{}", String::from_utf8_lossy(&output.stdout));
+            println!("image_data.py executed without any problems.");
+        }
+        Ok(output) => {
+            eprintln!("Python error:");
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+        }
+        Err(e) => {
+            eprintln!("Failed to start process: {}", e);
+        }
+    }
+}
+
 pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
     let target = Path::new("Communication/screenshot.png");
 
@@ -21,7 +43,11 @@ pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
         ),
     }
 
-    match Command::new("python3").arg("src/image_data.py").output() {
+    match Command::new("python3")
+        .arg("src/image_data.py")
+        .arg("--predict")
+        .output()
+    {
         Ok(output) if output.status.success() => {
             println!("{}", String::from_utf8_lossy(&output.stdout));
             println!("image_data.py executed without any problems.");

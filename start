@@ -5,6 +5,9 @@ set -e
 
 clear
 
+
+pip freeze > requirements.txt
+
 source venv/bin/activate
 
 
