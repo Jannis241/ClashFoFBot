@@ -6,8 +6,8 @@ edition = "2021"
 [dependencies]
 device_query = "4.0.1"
 eframe = "0.32.0"
-image = "0.25.6"
 rfd = "0.15.4"
-scrap = "0.5.0"
+image ="0.24.9" # NICHT VERÄNDERN!!!!!
+screenshots = "0.8.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.141"

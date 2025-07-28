@@ -9,16 +9,13 @@ pub struct Building {
 }
 
 pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
-    // 3. python script soll die ergebnisse in data.json speichern
-    // 4. ergebnisse hier auslesen5 (nachdem python fertig ist erst)
-    // 5. geparste ergebnisse (json zu Vec<Buildings> returnen)
     let target = Path::new("Communication/screenshot.png");
 
     let res = fs::copy(screeenshot_path, target);
 
     match res {
         Ok(_) => println!("Datei wurde erfolgreich kopiert!"),
-        Err(e) => println!(
+        Err(e) => eprintln!(
             "Error: {}  | Tried to copy {:?} to {:?}.",
             e, screeenshot_path, target
         ),
