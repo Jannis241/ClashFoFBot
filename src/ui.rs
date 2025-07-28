@@ -19,14 +19,25 @@ fn keycode_from_str(key: &str) -> Option<Keycode> {
     )
 }
 
-use crate::screenshot;
-
 pub struct ScreenshotApp {
     pub screenshot_path: String,
     pub keybind: String,
     pub selected_image: Option<String>,
     pub image_folder: Option<PathBuf>,
     pub available_images: Vec<String>,
+
+    // Neu:
+    image_texture: Option<egui::TextureHandle>,
+    labeled_rects: Vec<LabeledRect>,
+    current_rect_start: Option<egui::Pos2>,
+    current_rect_end: Option<egui::Pos2>,
+    current_label: String,
+}
+
+#[derive(Clone)]
+struct LabeledRect {
+    rect: egui::Rect,
+    label: String,
 }
 
 impl Default for ScreenshotApp {
@@ -37,6 +48,11 @@ impl Default for ScreenshotApp {
             selected_image: None,
             image_folder: None,
             available_images: vec![],
+            image_texture: None,
+            current_label: "".to_string(),
+            current_rect_end: None,
+            current_rect_start: None,
+            labeled_rects: vec![],
         }
     }
 }
@@ -112,8 +128,9 @@ impl eframe::App for ScreenshotApp {
                     .contains(&keycode_from_str(&self.keybind).unwrap_or(Keycode::V))
                 {
                     println!("took screenshot");
-                    let screen = screenshot::Screenshot::get_screenshot();
-                    screen.save(&Path::new(&self.screenshot_path));
+                    let img = screener::make_screenshot(0);
+                    img.save(&self.screenshot_path)
+                        .expect("error while saving img");
                 }
             });
 
