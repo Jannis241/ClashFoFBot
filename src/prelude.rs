@@ -19,5 +19,6 @@ pub use std::io::{BufReader, BufWriter, Read, Write};
 pub use std::os::unix::ffi::OsStrExt;
 pub use std::path::{Path, PathBuf};
 pub use std::process::Command;
+pub use std::str::FromStr;
 pub use std::thread;
 pub use std::time::Duration;

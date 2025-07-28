@@ -1,4 +1,5 @@
 use crate::prelude::*;
+
 macro_rules! generate_keycode_match {
     ( $key:expr, $( $name:ident ),* ) => {{
         use device_query::Keycode::*;
@@ -47,10 +48,12 @@ struct LabeledRect {
 impl Default for ScreenshotApp {
     fn default() -> Self {
         Self {
-            screenshot_path: "images".to_string(),
+            screenshot_path: "/home/jesko/programmieren/ClashFoFBot/images".to_string(),
             keybind: "r".to_string(),
             selected_image: None,
-            image_folder: None,
+            image_folder: Some(
+                PathBuf::from_str("/home/jesko/programmieren/ClashFoFBot/images").unwrap(),
+            ),
             available_images: vec![],
             active_tab: Tab::Settings,
             image_texture: None,
@@ -62,6 +65,12 @@ impl Default for ScreenshotApp {
 }
 
 impl ScreenshotApp {
+    fn is_image_in_dataset(&self, filename: &str) -> bool {
+        let train_path = Path::new("dataset/images/train").join(filename);
+        let val_path = Path::new("dataset/images/val").join(filename);
+        train_path.exists() || val_path.exists()
+    }
+
     fn update_image_list(&mut self) {
         if let Some(folder) = &self.image_folder {
             if let Ok(entries) = fs::read_dir(folder) {
@@ -183,12 +192,10 @@ impl eframe::App for ScreenshotApp {
                             self.update_image_list(); // 👈 Bildliste neu laden
                         }
                     });
-
                     ui.collapsing("🖼️ Labeln", |ui| {
                         if ui.button("📂 Ordner wählen").clicked() {
                             if let Some(path) = rfd::FileDialog::new().pick_folder() {
                                 self.image_folder = Some(path.clone());
-                                self.update_image_list();
                                 self.image_texture = None;
                             }
                         }
@@ -197,11 +204,29 @@ impl eframe::App for ScreenshotApp {
                             ui.label(format!("📁 Ordner: {}", folder.display()));
                         }
 
+                        self.update_image_list();
+
                         for img in &self.available_images {
-                            if ui
-                                .selectable_label(self.selected_image.as_deref() == Some(img), img)
-                                .clicked()
-                            {
+                            let filename = Path::new(img)
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy();
+
+                            let in_dataset = self.is_image_in_dataset(&filename);
+                            let is_selected = self.selected_image.as_deref() == Some(img);
+
+                            // Farbe festlegen
+                            let color = if is_selected {
+                                egui::Color32::from_rgb(100, 150, 255) // blau
+                            } else if in_dataset {
+                                egui::Color32::from_rgb(0, 200, 100) // grün
+                            } else {
+                                egui::Color32::from_rgb(200, 50, 50) // rot
+                            };
+
+                            let label = egui::RichText::new(filename).color(color);
+
+                            if ui.selectable_label(is_selected, label).clicked() {
                                 self.selected_image = Some(img.clone());
                                 self.image_texture = None;
                             }
