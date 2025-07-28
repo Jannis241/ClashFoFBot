@@ -227,17 +227,29 @@ impl eframe::App for ScreenshotApp {
                         }
 
                         if let Some(texture) = &self.image_texture {
+                            // Verfügbare Größe des Panels
+                            let available_size = ui.available_size();
+                            let tex_size =
+                                egui::vec2(texture.size()[0] as f32, texture.size()[1] as f32);
+
+                            // Bildgröße proportional anpassen (Seitenverhältnis behalten)
+                            let scale =
+                                (available_size.x / tex_size.x).min(available_size.y / tex_size.y);
+                            let final_size = tex_size * scale;
+
                             // Bild anzeigen
-                            let img_response = ui.image(texture);
+                            let img = egui::Image::new(texture).fit_to_exact_size(final_size);
+                            let response = ui.add(img);
 
-                            let pointer_pos = ui.input(|i| i.pointer.interact_pos());
-                            let rect = img_response.rect;
+                            // Das gezeichnete Rechteck
+                            let rect = response.rect;
 
-                            let cursor_over_image = if let Some(pos) = pointer_pos {
-                                rect.contains(pos)
-                            } else {
-                                false
-                            };
+                            // Cursor-Position innerhalb des Bildes ermitteln
+                            let cursor_pos = ui.ctx().input(|i| i.pointer.hover_pos());
+                            let cursor_over_image =
+                                cursor_pos.map_or(false, |pos| rect.contains(pos));
+
+                            let pointer_pos = ui.input(|i| i.pointer.hover_pos());
 
                             if cursor_over_image {
                                 let pointer_down = ui.input(|i| i.pointer.primary_down());
@@ -277,20 +289,49 @@ impl eframe::App for ScreenshotApp {
 
                             if self.current_rect_start.is_none() {
                                 if let Some(r) = self.labeled_rects.last_mut() {
+                                    // Lade bekannte Klassen aus data.yaml
+                                    let yaml_path = std::path::Path::new("dataset/data.yaml");
+                                    let yaml_content =
+                                        std::fs::read_to_string(yaml_path).unwrap_or_default();
+
+                                    #[derive(Deserialize)]
+                                    struct DataYaml {
+                                        names: std::collections::HashMap<usize, String>,
+                                    }
+
+                                    let class_names: Vec<String> = if let Ok(data) =
+                                        serde_yaml::from_str::<DataYaml>(&yaml_content)
+                                    {
+                                        data.names.values().cloned().collect()
+                                    } else {
+                                        vec![]
+                                    };
+
                                     for event in &ctx.input(|i| i.events.clone()) {
-                                        if let egui::Event::Text(text) = event {
-                                            // Text enthält den getippten String (kann auch mehrere Buchstaben sein)
-                                            // Wir hängen ihn an das Label an:
-                                            r.label.push_str(text);
-                                        }
-                                        if let egui::Event::Key {
-                                            key, pressed: true, ..
-                                        } = event
-                                        {
-                                            // Backspace behandeln
-                                            if *key == egui::Key::Backspace {
-                                                r.label.pop();
+                                        match event {
+                                            egui::Event::Text(text) => {
+                                                r.label.push_str(text);
                                             }
+                                            egui::Event::Key {
+                                                key, pressed: true, ..
+                                            } => match key {
+                                                egui::Key::Backspace => {
+                                                    r.label.pop();
+                                                }
+                                                egui::Key::Tab => {
+                                                    let trimmed = r.label.trim();
+                                                    let matches: Vec<&String> = class_names
+                                                        .iter()
+                                                        .filter(|name| name.starts_with(trimmed))
+                                                        .collect();
+
+                                                    if matches.len() == 1 {
+                                                        r.label = matches[0].clone();
+                                                    }
+                                                }
+                                                _ => {}
+                                            },
+                                            _ => {}
                                         }
                                     }
                                 }
@@ -300,29 +341,30 @@ impl eframe::App for ScreenshotApp {
                                 if let Some(image_path) = &self.selected_image {
                                     println!("📦 Speichere YOLO-Labels...");
 
-                                    // Lade data.yaml
-                                    #[derive(Debug, Deserialize)]
+                                    use std::collections::HashMap;
+                                    use std::fs;
+                                    use std::io::Write;
+                                    use std::path::Path;
+
+                                    #[derive(Debug, Deserialize, Serialize)]
                                     struct DataYaml {
                                         train: String,
                                         val: String,
-                                        names: std::collections::HashMap<usize, String>,
+                                        names: HashMap<usize, String>,
                                     }
 
                                     let yaml_path = Path::new("dataset/data.yaml");
-                                    let yaml_content = std::fs::read_to_string(yaml_path)
+                                    let yaml_content = fs::read_to_string(yaml_path)
                                         .expect("❌ Kann data.yaml nicht lesen");
-                                    let data: DataYaml = serde_yaml::from_str(&yaml_content)
+                                    let mut data: DataYaml = serde_yaml::from_str(&yaml_content)
                                         .expect("❌ Kann data.yaml nicht parsen");
 
-                                    // Mapping: Klassenname → ID
-                                    let class_map: std::collections::HashMap<String, usize> =
+                                    // Umgekehrtes Mapping: Label → ID
+                                    let mut class_map: HashMap<String, usize> =
                                         data.names.iter().map(|(k, v)| (v.clone(), *k)).collect();
 
-                                    // Lade Bildgröße
-                                    let img =
-                                        image::open(image_path).expect("❌ Bild nicht lesbar");
-                                    let w = img.width();
-                                    let h = img.height();
+                                    let w = final_size.x;
+                                    let h = final_size.y;
 
                                     // Zielordner zufällig: train oder val
                                     let mut rng = rand::thread_rng();
@@ -347,45 +389,59 @@ impl eframe::App for ScreenshotApp {
                                         .unwrap();
 
                                     let target_img_path = img_target.join(filename);
-                                    std::fs::create_dir_all(img_target).unwrap();
-                                    std::fs::copy(image_path, &target_img_path)
+                                    fs::create_dir_all(img_target).unwrap();
+                                    fs::copy(image_path, &target_img_path)
                                         .expect("❌ Bild konnte nicht kopiert werden");
 
                                     // Label-Datei schreiben
                                     let label_path =
                                         label_target.join(filename.replace(".png", ".txt"));
-                                    std::fs::create_dir_all(label_target).unwrap();
+                                    fs::create_dir_all(label_target).unwrap();
 
-                                    let mut label_file = std::fs::File::create(&label_path)
+                                    let mut label_file = fs::File::create(&label_path)
                                         .expect("❌ Konnte .txt nicht schreiben");
 
-                                    for lr in &self.labeled_rects {
-                                        let label = lr.label.trim();
-                                        if let Some(&class_id) = class_map.get(label) {
-                                            let x =
-                                                (lr.rect.min.x + lr.rect.max.x) / 2.0 / w as f32;
-                                            let y =
-                                                (lr.rect.min.y + lr.rect.max.y) / 2.0 / h as f32;
-                                            let bw = (lr.rect.max.x - lr.rect.min.x) / w as f32;
-                                            let bh = (lr.rect.max.y - lr.rect.min.y) / h as f32;
+                                    let mut yaml_updated = false;
 
-                                            use std::io::Write;
-                                            writeln!(
-                                                label_file,
-                                                "{} {:.6} {:.6} {:.6} {:.6}",
-                                                class_id, x, y, bw, bh
-                                            )
-                                            .expect("❌ Schreiben fehlgeschlagen");
+                                    for lr in &self.labeled_rects {
+                                        let label = lr.label.trim().to_string();
+
+                                        // Wenn Klasse nicht existiert, hinzufügen
+                                        let class_id = if let Some(id) = class_map.get(&label) {
+                                            *id
                                         } else {
-                                            eprintln!(
-                                                "⚠️ Label '{}' nicht in data.yaml gefunden",
-                                                label
-                                            );
-                                        }
+                                            let new_id = data.names.len();
+                                            data.names.insert(new_id, label.clone());
+                                            class_map.insert(label.clone(), new_id);
+                                            yaml_updated = true;
+                                            new_id
+                                        };
+
+                                        let x = (lr.rect.min.x + lr.rect.max.x) / 2.0 / w as f32;
+                                        let y = (lr.rect.min.y + lr.rect.max.y) / 2.0 / h as f32;
+                                        let bw = (lr.rect.max.x - lr.rect.min.x) / w as f32;
+                                        let bh = (lr.rect.max.y - lr.rect.min.y) / h as f32;
+
+                                        writeln!(
+                                            label_file,
+                                            "{} {:.6} {:.6} {:.6} {:.6}",
+                                            class_id, x, y, bw, bh
+                                        )
+                                        .expect("❌ Schreiben fehlgeschlagen");
+                                    }
+
+                                    // YAML zurückschreiben, wenn geändert
+                                    if yaml_updated {
+                                        let new_yaml = serde_yaml::to_string(&data)
+                                            .expect("❌ Fehler beim YAML-Serialisieren");
+                                        fs::write(yaml_path, new_yaml)
+                                            .expect("❌ Fehler beim Schreiben von data.yaml");
+                                        println!("📄 Neue Labels wurden zu data.yaml hinzugefügt.");
                                     }
 
                                     println!("✅ YOLO-Label gespeichert: {}", label_path.display());
                                     self.labeled_rects.clear(); // fertig gelabelt
+                                    self.active_tab = Tab::Settings;
                                 }
                             }
 

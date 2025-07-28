@@ -10,7 +10,7 @@ pub use chrono::Local;
 pub use eframe::egui::StrokeKind;
 pub use rand::Rng;
 pub use screenshots::Screen;
-pub use serde::Deserialize;
+pub use serde::{Deserialize, Serialize};
 use serde_json::Result;
 pub use std::error::Error;
 pub use std::fs;
