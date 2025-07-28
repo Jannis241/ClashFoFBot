@@ -18,7 +18,7 @@ pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
     // auslesen kann.
     // 2. python script callen
     // 3. python script soll die ergebnisse in data.json speichern
-    // 4. ergebnisse hier auslesen5
+    // 4. ergebnisse hier auslesen5 (nachdem python fertig ist erst)
     // 5. geparste ergebnisse (json zu Vec<Buildings> returnen)
     let target = Path::new("Communication/screenshot.png");
 
@@ -27,8 +27,8 @@ pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
     match res {
         Ok(_) => println!("Datei wurde erfolgreich kopiert!"),
         Err(e) => println!(
-            "Error while trying to copy {:?} to {:?}.",
-            screeenshot_path, target
+            "Error: {}  while trying to copy {:?} to {:?}.",
+            e, screeenshot_path, target
         ),
     }
 

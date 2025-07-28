@@ -1,8 +1,5 @@
 use crate::prelude::*;
 
-use scrap::{Capturer, Display};
-use std::{thread, time::Duration};
-
 pub fn get_screenshot() -> (Vec<u8>, usize, usize) {
     // Hole das primäre Display
     let display = loop {
