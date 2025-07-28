@@ -1,5 +1,6 @@
 pub use crate::*;
 pub use eframe;
+pub use image::{io::Reader as ImageReader, ImageBuffer, Rgba, RgbaImage};
 pub use scrap::{Capturer, Display};
 pub use serde::Deserialize;
 use serde_json::Result;
