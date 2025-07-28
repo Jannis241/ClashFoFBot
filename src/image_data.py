@@ -1,33 +1,42 @@
 import json
 import os
 
-file_path = "Communication/data.json"
+def write_data(data):
+    file_path = "Communication/data.json"
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
-data = [
-    {
-        "class_id": 1,
-        "class_name": "luftabwehr",
-        "confidence": 0.95,
-        "bounding_box": [100.5, 150.0, 200.25, 250.75]
-    },
-    {
-        "class_id": 2,
-        "class_name": "mauer",
-        "confidence": 0.88,
-        "bounding_box": [50.0, 75.5, 120.0, 180.0]
-    },
-    {
-        "class_id": 3,
-        "class_name": "kanone",
-        "confidence": 0.91,
-        "bounding_box": [300.0, 400.0, 450.0, 550.0]
-    }
-]
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4)
 
-os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    print(f"Daten erfolgreich in {file_path} geschrieben.")
 
-with open(file_path, 'w', encoding='utf-8') as f:
-    json.dump(data, f, indent=4)
 
-print(f"Daten erfolgreich in {file_path} geschrieben.")
+
+data = []
+
+
+from ultralytics import YOLO
+
+model = YOLO('yolov8n.yaml')
+
+model.train(
+    data='dataset/data.yaml',
+    epochs=30,
+    imgsz=640,
+    batch=8
+)
+
+model.val()
+
+best_model = YOLO('runs/detect/train/weights/best.pt')
+results = best_model('Communication/screenshot.png', show=True)
+
+print(results)
+
+
+write_data(data)
+
+
+
+
 
