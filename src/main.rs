@@ -5,4 +5,7 @@ mod screenshot;
 mod settings_manager;
 mod ui;
 
-fn main() {}
+fn main() {
+    // test
+    image_data_wrapper::get_buildings(Path::new("images/fufu.png"));
+}
