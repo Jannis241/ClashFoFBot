@@ -33,7 +33,7 @@ impl Default for ScreenshotApp {
     fn default() -> Self {
         Self {
             screenshot_path: "screenshot.png".to_string(),
-            keybind: "F12".to_string(),
+            keybind: "r".to_string(),
             selected_image: None,
             image_folder: None,
             available_images: vec![],
@@ -63,12 +63,40 @@ impl ScreenshotApp {
 
 impl eframe::App for ScreenshotApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let mut style: egui::Style = (*ctx.style()).clone();
+        let size = 2.;
+        style.text_styles = [
+            (
+                egui::TextStyle::Heading,
+                egui::FontId::new(28.0 * size, egui::FontFamily::Proportional),
+            ),
+            (
+                egui::TextStyle::Body,
+                egui::FontId::new(18.0 * size, egui::FontFamily::Proportional),
+            ),
+            (
+                egui::TextStyle::Button,
+                egui::FontId::new(18.0 * size, egui::FontFamily::Proportional),
+            ),
+            (
+                egui::TextStyle::Monospace,
+                egui::FontId::new(16.0 * size, egui::FontFamily::Monospace),
+            ),
+            (
+                egui::TextStyle::Small,
+                egui::FontId::new(14.0 * size, egui::FontFamily::Proportional),
+            ),
+        ]
+        .into();
+
+        ctx.set_style(style);
+
         ctx.request_repaint();
 
-        egui::Window::new("Screenshot Tool").show(ctx, |ui| {
+        egui::CentralPanel::default().show(ctx, |ui| {
             ui.collapsing("📸 Keybinds", |ui| {
                 ui.horizontal(|ui| {
-                    ui.label("Screenshot-Key (nur visuell):");
+                    ui.label("Screenshot-Key:");
                     ui.text_edit_singleline(&mut self.keybind);
                 });
 
