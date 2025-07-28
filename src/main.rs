@@ -5,3 +5,8 @@ fn main() {
 fn fufu() {}
 
 fn dede() {}
+
+
+
+
+fn test3(A)
