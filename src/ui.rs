@@ -1,7 +1,3 @@
-use std::os::unix::ffi::OsStrExt;
-
-use eframe::egui::StrokeKind;
-
 use crate::prelude::*;
 macro_rules! generate_keycode_match {
     ( $key:expr, $( $name:ident ),* ) => {{
@@ -297,6 +293,99 @@ impl eframe::App for ScreenshotApp {
                                             }
                                         }
                                     }
+                                }
+                            }
+
+                            if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                if let Some(image_path) = &self.selected_image {
+                                    println!("📦 Speichere YOLO-Labels...");
+
+                                    // Lade data.yaml
+                                    #[derive(Debug, Deserialize)]
+                                    struct DataYaml {
+                                        train: String,
+                                        val: String,
+                                        names: std::collections::HashMap<usize, String>,
+                                    }
+
+                                    let yaml_path = Path::new("dataset/data.yaml");
+                                    let yaml_content = std::fs::read_to_string(yaml_path)
+                                        .expect("❌ Kann data.yaml nicht lesen");
+                                    let data: DataYaml = serde_yaml::from_str(&yaml_content)
+                                        .expect("❌ Kann data.yaml nicht parsen");
+
+                                    // Mapping: Klassenname → ID
+                                    let class_map: std::collections::HashMap<String, usize> =
+                                        data.names.iter().map(|(k, v)| (v.clone(), *k)).collect();
+
+                                    // Lade Bildgröße
+                                    let img =
+                                        image::open(image_path).expect("❌ Bild nicht lesbar");
+                                    let w = img.width();
+                                    let h = img.height();
+
+                                    // Zielordner zufällig: train oder val
+                                    let mut rng = rand::thread_rng();
+                                    let is_train = rng.gen_bool(0.8); // 80% train
+                                    let (img_target, label_target) = if is_train {
+                                        (
+                                            Path::new("dataset/images/train"),
+                                            Path::new("dataset/labels/train"),
+                                        )
+                                    } else {
+                                        (
+                                            Path::new("dataset/images/val"),
+                                            Path::new("dataset/labels/val"),
+                                        )
+                                    };
+
+                                    // Datei kopieren
+                                    let filename = Path::new(image_path)
+                                        .file_name()
+                                        .unwrap()
+                                        .to_str()
+                                        .unwrap();
+
+                                    let target_img_path = img_target.join(filename);
+                                    std::fs::create_dir_all(img_target).unwrap();
+                                    std::fs::copy(image_path, &target_img_path)
+                                        .expect("❌ Bild konnte nicht kopiert werden");
+
+                                    // Label-Datei schreiben
+                                    let label_path =
+                                        label_target.join(filename.replace(".png", ".txt"));
+                                    std::fs::create_dir_all(label_target).unwrap();
+
+                                    let mut label_file = std::fs::File::create(&label_path)
+                                        .expect("❌ Konnte .txt nicht schreiben");
+
+                                    for lr in &self.labeled_rects {
+                                        let label = lr.label.trim();
+                                        if let Some(&class_id) = class_map.get(label) {
+                                            let x =
+                                                (lr.rect.min.x + lr.rect.max.x) / 2.0 / w as f32;
+                                            let y =
+                                                (lr.rect.min.y + lr.rect.max.y) / 2.0 / h as f32;
+                                            let bw = (lr.rect.max.x - lr.rect.min.x) / w as f32;
+                                            let bh = (lr.rect.max.y - lr.rect.min.y) / h as f32;
+
+                                            use std::io::Write;
+                                            writeln!(
+                                                label_file,
+                                                "{} {:.6} {:.6} {:.6} {:.6}",
+                                                class_id, x, y, bw, bh
+                                            )
+                                            .expect("❌ Schreiben fehlgeschlagen");
+                                        } else {
+                                            eprintln!(
+                                                "⚠️ Label '{}' nicht in data.yaml gefunden",
+                                                label
+                                            );
+                                        }
+                                    }
+
+                                    println!("✅ YOLO-Label gespeichert: {}", label_path.display());
+                                    self.labeled_rects.clear(); // fertig gelabelt
                                 }
                             }
 
