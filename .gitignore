@@ -25,3 +25,14 @@ target
 # Added by cargo
 
 /target
+
+
+# temp
+/runs
+/dataset
+/images
+
+
+
+
+
