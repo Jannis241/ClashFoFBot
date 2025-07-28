@@ -1,4 +1,10 @@
 use crate::prelude::*;
+
+pub use std::fs;
+pub use std::fs::{copy, read_to_string, remove_file, write, File, OpenOptions};
+pub use std::io::{BufReader, BufWriter, Read, Write};
+pub use std::path::{Path, PathBuf};
+
 pub struct BoundingBox {
     pub top_left: (f32, f32),
     pub top_right: (f32, f32),
@@ -21,12 +27,12 @@ pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
     // 5. geparste ergebnisse (json zu Vec<Buildings> returnen)
     let target = Path::new("Communication/screenshot.png");
 
-    let res = fs::copy(source, destination);
+    let res = fs::copy(screeenshot_path, target);
 
     match res {
         Ok(_) => println!("Datei wurde erfolgreich kopiert!"),
         Err(e) => println!(
-            "Error while trying to copy {} to {}.",
+            "Error while trying to copy {:?} to {:?}.",
             screeenshot_path, target
         ),
     }

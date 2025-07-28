@@ -1,0 +1,6 @@
+- tests in git ignore packen
+- errors anzeigen lassen
+- prelude, imports, use usw fixxen. use crate::*; so machen dass man alles überall benutzen kann.
+
+- irgendwie muss man noch use create::*; machen damit errors funktionieren.
+- doppelte imports weg machen (take screenshot und wrapper)
