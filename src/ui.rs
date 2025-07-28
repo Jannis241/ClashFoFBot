@@ -1,3 +1,5 @@
+use eframe::egui::StrokeKind;
+
 use crate::prelude::*;
 macro_rules! generate_keycode_match {
     ( $key:expr, $( $name:ident ),* ) => {{
@@ -18,6 +20,11 @@ fn keycode_from_str(key: &str) -> Option<Keycode> {
         Key8, Key9, Escape, Space, Enter, Backspace, LShift, RShift
     )
 }
+#[derive(PartialEq)]
+enum Tab {
+    Settings,
+    YoloLabel,
+}
 
 pub struct ScreenshotApp {
     pub screenshot_path: String,
@@ -26,7 +33,7 @@ pub struct ScreenshotApp {
     pub image_folder: Option<PathBuf>,
     pub available_images: Vec<String>,
 
-    // Neu:
+    active_tab: Tab,
     image_texture: Option<egui::TextureHandle>,
     labeled_rects: Vec<LabeledRect>,
     current_rect_start: Option<egui::Pos2>,
@@ -48,6 +55,7 @@ impl Default for ScreenshotApp {
             selected_image: None,
             image_folder: None,
             available_images: vec![],
+            active_tab: Tab::Settings,
             image_texture: None,
             current_label: "".to_string(),
             current_rect_end: None,
@@ -110,51 +118,158 @@ impl eframe::App for ScreenshotApp {
         ctx.request_repaint();
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.collapsing("📸 Keybinds", |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Screenshot-Key:");
-                    ui.text_edit_singleline(&mut self.keybind);
-                });
-
-                ui.horizontal(|ui| {
-                    ui.label("Speicherpfad:");
-                    ui.text_edit_singleline(&mut self.screenshot_path);
-                });
-
-                let state = DeviceState::new();
-
-                if state
-                    .query_keymap()
-                    .contains(&keycode_from_str(&self.keybind).unwrap_or(Keycode::V))
+            ui.horizontal(|ui| {
+                if ui
+                    .selectable_label(self.active_tab == Tab::Settings, "⚙️ Einstellungen")
+                    .clicked()
                 {
-                    println!("took screenshot");
-                    let img = screener::make_screenshot(0);
-                    img.save(&self.screenshot_path)
-                        .expect("error while saving img");
+                    self.active_tab = Tab::Settings;
+                }
+                if ui
+                    .selectable_label(self.active_tab == Tab::YoloLabel, "🖼️ YOLO-Label")
+                    .clicked()
+                {
+                    self.active_tab = Tab::YoloLabel;
                 }
             });
 
-            ui.collapsing("🖼️ Labeln", |ui| {
-                if ui.button("📂 Ordner wählen").clicked() {
-                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                        self.image_folder = Some(path.clone());
-                        self.update_image_list();
-                    }
+            ui.separator();
+
+            match self.active_tab {
+                Tab::Settings => {
+                    ui.collapsing("📸 Keybinds", |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("Screenshot-Key:");
+                            ui.text_edit_singleline(&mut self.keybind);
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Speicherpfad:");
+                            ui.text_edit_singleline(&mut self.screenshot_path);
+                        });
+
+                        let state = DeviceState::new();
+                        if state
+                            .query_keymap()
+                            .contains(&keycode_from_str(&self.keybind).unwrap_or(Keycode::V))
+                        {
+                            println!("took screenshot");
+                            let screen = screener::make_screenshot(0);
+                            screen.save(&Path::new(&self.screenshot_path));
+                        }
+                    });
+
+                    ui.collapsing("🖼️ Labeln", |ui| {
+                        if ui.button("📂 Ordner wählen").clicked() {
+                            if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                self.image_folder = Some(path.clone());
+                                self.update_image_list();
+                                self.image_texture = None;
+                            }
+                        }
+
+                        if let Some(folder) = &self.image_folder {
+                            ui.label(format!("📁 Ordner: {}", folder.display()));
+                        }
+
+                        for img in &self.available_images {
+                            if ui
+                                .selectable_label(self.selected_image.as_deref() == Some(img), img)
+                                .clicked()
+                            {
+                                self.selected_image = Some(img.clone());
+                                self.image_texture = None;
+                            }
+                        }
+                    });
                 }
 
-                if let Some(folder) = &self.image_folder {
-                    ui.label(format!("📁 Ordner: {}", folder.display()));
-                }
+                Tab::YoloLabel => {
+                    if let Some(selected) = &self.selected_image {
+                        // Bild laden & in Texture umwandeln
+                        if self.image_texture.is_none() {
+                            if let Ok(img) = image::open(selected) {
+                                let img = img.to_rgba8();
+                                let size = [img.width() as usize, img.height() as usize];
+                                let color_img =
+                                    egui::ColorImage::from_rgba_unmultiplied(size, &img.into_raw());
+                                self.image_texture = Some(ctx.load_texture(
+                                    "selected_image",
+                                    color_img,
+                                    Default::default(),
+                                ));
+                            }
+                        }
 
-                for img in &self.available_images {
-                    if ui
-                        .selectable_label(self.selected_image.as_deref() == Some(img), img)
-                        .clicked()
-                    {
-                        self.selected_image = Some(img.clone());
+                        if let Some(texture) = &self.image_texture {
+                            // Bild anzeigen
+                            let response = ui.image(texture);
+
+                            // Rechteck-Zeichnen
+                            if response.drag_started() {
+                                self.current_rect_start = response.interact_pointer_pos();
+                                self.current_rect_end = self.current_rect_start;
+                            }
+                            if response.dragged() {
+                                self.current_rect_end = response.interact_pointer_pos();
+                            }
+                            if response.drag_stopped() {
+                                if let (Some(start), Some(end)) =
+                                    (self.current_rect_start, self.current_rect_end)
+                                {
+                                    let rect = egui::Rect::from_two_pos(start, end);
+                                    if !self.current_label.is_empty() {
+                                        self.labeled_rects.push(LabeledRect {
+                                            rect,
+                                            label: self.current_label.clone(),
+                                        });
+                                        self.current_label.clear();
+                                    }
+                                }
+                                self.current_rect_start = None;
+                                self.current_rect_end = None;
+                            }
+
+                            // Rechtecke zeichnen
+                            let painter = ui.painter();
+                            for lr in &self.labeled_rects {
+                                painter.rect_stroke(
+                                    lr.rect,
+                                    0.0,
+                                    (2.0, egui::Color32::RED),
+                                    StrokeKind::Middle,
+                                );
+                                painter.text(
+                                    lr.rect.left_top(),
+                                    egui::Align2::LEFT_TOP,
+                                    &lr.label,
+                                    egui::TextStyle::Body.resolve(&ctx.style()),
+                                    egui::Color32::YELLOW,
+                                );
+                            }
+
+                            if let (Some(start), Some(current)) =
+                                (self.current_rect_start, self.current_rect_end)
+                            {
+                                let rect = egui::Rect::from_two_pos(start, current);
+                                painter.rect_stroke(
+                                    rect,
+                                    0.0,
+                                    (1.0, egui::Color32::GREEN),
+                                    StrokeKind::Middle,
+                                );
+                            }
+
+                            ui.horizontal(|ui| {
+                                ui.label("📝 Label:");
+                                ui.text_edit_singleline(&mut self.current_label);
+                            });
+                        }
+                    } else {
+                        ui.label("Kein Bild ausgewählt.");
                     }
                 }
-            });
+            }
         });
     }
 }
