@@ -1,0 +1,2 @@
+jesko: prelude file einrichten bisschen, ui mit egui (screenshots machen, labeln) -> aber schon so machen dass das ganze von main gecallt wird mit threads usw
+jannis: yolo (Wie man das trainiet, funktion get_buildings, was für daten wir brauchen (für ui), buildings struct)
