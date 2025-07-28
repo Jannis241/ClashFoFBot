@@ -1,14 +1,12 @@
 use crate::prelude::*;
 
-pub fn start_ui_in_thread() {
-    std::thread::spawn(|| {
-        let options = eframe::NativeOptions::default();
-        let _ = eframe::run_native(
-            "Screenshot Tool",
-            options,
-            Box::new(|_cc| Ok(Box::new(ui::ScreenshotApp::default()))),
-        );
-    });
+pub fn start_ui() {
+    let options = eframe::NativeOptions::default();
+    eframe::run_native(
+        "Screenshot Tool",
+        options,
+        Box::new(|_cc| Ok(Box::new(ui::ScreenshotApp::default()))),
+    );
 }
 
 macro_rules! generate_keycode_match {

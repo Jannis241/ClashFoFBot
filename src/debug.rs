@@ -2,7 +2,7 @@ use crate::prelude::*;
 
 pub fn run_tests() {
     println!("Runnings tests..");
-    ui::start_ui_in_thread();
+    ui::start_ui();
 
     image_data_wrapper::train_model(10);
 
