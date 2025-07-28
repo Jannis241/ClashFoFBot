@@ -32,6 +32,7 @@ fn keycode_from_str(key: &str) -> Option<Keycode> {
 enum Tab {
     Settings,
     YoloLabel,
+    Model,
 }
 
 pub struct ScreenshotApp {
@@ -40,6 +41,7 @@ pub struct ScreenshotApp {
     pub selected_image: Option<String>,
     pub image_folder: Option<PathBuf>,
     pub available_images: Vec<String>,
+    pub epoche: String,
 
     active_tab: Tab,
     image_texture: Option<egui::TextureHandle>,
@@ -63,6 +65,7 @@ impl Default for ScreenshotApp {
             image_folder: Some(
                 PathBuf::from_str("/home/jesko/programmieren/ClashFoFBot/images").unwrap(),
             ),
+            epoche: "".to_string(),
             available_images: vec![],
             active_tab: Tab::Settings,
             image_texture: None,
@@ -156,6 +159,12 @@ impl eframe::App for ScreenshotApp {
                 {
                     self.active_tab = Tab::YoloLabel;
                 }
+                if ui
+                    .selectable_label(self.active_tab == Tab::Model, "Model")
+                    .clicked()
+                {
+                    self.active_tab = Tab::Model;
+                }
             });
 
             ui.separator();
@@ -242,7 +251,14 @@ impl eframe::App for ScreenshotApp {
                         }
                     });
                 }
-
+                Tab::Model => {
+                    ui.collapsing(
+                        "Träning",
+                        |ui: &mut egui::Ui| {
+                            if ui.button("Start Träning").clicked() {}
+                        },
+                    );
+                }
                 Tab::YoloLabel => {
                     if let Some(selected) = &self.selected_image {
                         // Bild laden & in Texture umwandeln
