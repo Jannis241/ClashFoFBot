@@ -373,12 +373,12 @@ impl eframe::App for ScreenshotApp {
 
                                     let mut buildings = self.current_buildings.clone().unwrap();
 
-                                    buildings.push(image_data_wrapper::Building {
-                                        class_id: 2,
-                                        class_name: "luft".to_string(),
-                                        confidence: 0.543,
-                                        bounding_box: (0.5, 0.5, 0.5, 0.5),
-                                    });
+                                    // buildings.push(image_data_wrapper::Building {
+                                    //     class_id: 2,
+                                    //     class_name: "luft".to_string(),
+                                    //     confidence: 0.543,
+                                    //     bounding_box: (0.5, 0.5, 0.5, 0.5),
+                                    // });
 
                                     // Ursprungs-Rechteck des Bildes im UI
                                     let rect = response.rect;
@@ -426,8 +426,8 @@ impl eframe::App for ScreenshotApp {
 
                                         // Label-Text (oben links)
                                         let label_text = format!(
-                                            "ID: {} ({:.0}%)",
-                                            building.class_id,
+                                            "{} ({:.0}%)",
+                                            building.class_name,
                                             building.confidence * 100.0
                                         );
 
