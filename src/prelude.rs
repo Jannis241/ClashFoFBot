@@ -20,5 +20,9 @@ pub use std::os::unix::ffi::OsStrExt;
 pub use std::path::{Path, PathBuf};
 pub use std::process::Command;
 pub use std::str::FromStr;
-pub use std::thread;
+pub use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
+pub use std::thread::{self, JoinHandle};
 pub use std::time::Duration;

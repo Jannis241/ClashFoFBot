@@ -6,6 +6,7 @@ mod image_data_wrapper;
 mod prelude;
 mod screener;
 mod settings_manager;
+mod threading;
 mod ui;
 
 fn main() {
