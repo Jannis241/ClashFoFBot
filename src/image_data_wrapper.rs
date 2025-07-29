@@ -80,5 +80,10 @@ pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
     let buildings: Vec<Building> =
         serde_json::from_reader(reader).expect("Error while trying to read from data.json.");
 
+    fs::remove_file(Path::new("Communication/screenshot.png"))
+        .expect("Error while removing screenshot.png after model analyis. Something went wrong.");
+    fs::remove_file(Path::new("Communication/data.json"))
+        .expect("Error while removing data.json after model analyis. Something went wrong.");
+
     return buildings;
 }
