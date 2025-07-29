@@ -371,7 +371,14 @@ impl eframe::App for ScreenshotApp {
                                             )));
                                     }
 
-                                    let buildings = self.current_buildings.clone().unwrap();
+                                    let mut buildings = self.current_buildings.clone().unwrap();
+
+                                    buildings.push(image_data_wrapper::Building {
+                                        class_id: 2,
+                                        class_name: "luft".to_string(),
+                                        confidence: 0.543,
+                                        bounding_box: (0.5, 0.5, 0.5, 0.5),
+                                    });
 
                                     // Ursprungs-Rechteck des Bildes im UI
                                     let rect = response.rect;
@@ -379,6 +386,11 @@ impl eframe::App for ScreenshotApp {
                                     // Koordinaten-Umrechnung: (0..1) → Bildschirm
                                     for building in buildings {
                                         let (x, y, w, h) = building.bounding_box;
+
+                                        let x = x * tex_size.x;
+                                        let y = y * tex_size.y;
+                                        let w = w * tex_size.x;
+                                        let h = h * tex_size.y;
 
                                         // Bounding-Box-Koordinaten relativ zum Bild (normalisiert oder nicht?)
                                         // Wenn Koordinaten in Pixeln: einfach *scale
