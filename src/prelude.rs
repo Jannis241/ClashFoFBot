@@ -7,7 +7,7 @@ pub use image::{io::Reader as ImageReader, ImageBuffer, Rgba, RgbaImage};
 pub use rfd;
 // pub use image::{io::Reader as ImageReader, ImageBuffer, Rgba, RgbaImage};
 pub use chrono::Local;
-pub use eframe::egui::StrokeKind;
+pub use eframe::egui::{Color32, RichText, StrokeKind};
 pub use rand::Rng;
 pub use screenshots::Screen;
 pub use serde::{Deserialize, Serialize};

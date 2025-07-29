@@ -43,6 +43,7 @@ pub struct ScreenshotApp {
     pub available_images: Vec<String>,
     pub epoche: String,
 
+    current_train_thread: Option<std::thread::JoinHandle<()>>,
     active_tab: Tab,
     image_texture: Option<egui::TextureHandle>,
     labeled_rects: Vec<LabeledRect>,
@@ -66,6 +67,7 @@ impl Default for ScreenshotApp {
                 PathBuf::from_str("/home/jesko/programmieren/ClashFoFBot/images").unwrap(),
             ),
             epoche: "".to_string(),
+            current_train_thread: None,
             available_images: vec![],
             active_tab: Tab::Settings,
             image_texture: None,
@@ -252,12 +254,38 @@ impl eframe::App for ScreenshotApp {
                     });
                 }
                 Tab::Model => {
-                    ui.collapsing(
-                        "Träning",
-                        |ui: &mut egui::Ui| {
-                            if ui.button("Start Träning").clicked() {}
-                        },
-                    );
+                    ui.collapsing("Training", |ui: &mut egui::Ui| {
+                        // Eingabe für Epochen
+                        ui.horizontal(|ui| {
+                            ui.label("Epochen:");
+                            ui.text_edit_singleline(&mut self.epoche);
+                        });
+
+                        if let Some(t) = &self.current_train_thread {
+                            if t.is_finished() {
+                                self.current_train_thread = None;
+                            }
+                            // Statt Button: Info-Text in Gelb
+                            ui.label(RichText::new("Training läuft...").color(Color32::YELLOW));
+                        } else {
+                            // Start-Button (grün)
+                            if ui
+                                .add(egui::Button::new(
+                                    RichText::new("Start Träning")
+                                        .color(Color32::WHITE)
+                                        .background_color(Color32::GREEN),
+                                ))
+                                .clicked()
+                            {
+                                if let Ok(e) = self.epoche.trim().parse::<i32>() {
+                                    let handle = std::thread::spawn(move || {
+                                        image_data_wrapper::train_model(e);
+                                    });
+                                    self.current_train_thread = Some(handle);
+                                }
+                            }
+                        }
+                    });
                 }
                 Tab::YoloLabel => {
                     if let Some(selected) = &self.selected_image {
