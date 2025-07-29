@@ -3,7 +3,6 @@ import os
 from ultralytics import YOLO
 import argparse
 
-data = []
 
 def write_data(data):
     file_path = "Communication/data.json"
@@ -32,15 +31,34 @@ def continue_training(model_path=BEST_MODEL_PATH, epochs: int = 50):
     model.train(data=DATA_YAML, epochs=epochs)
     print("Weitertraining abgeschlossen.")
 
-def get_prediction(image_path, model_path=BEST_MODEL_PATH):
+def write_prediction_to_json(image_path, model_path=BEST_MODEL_PATH):
     print("Prediction mit Modell:", model_path)
     print("Bild:", image_path)
     if not os.path.exists(model_path):
         print("Modellpfad nicht gefunden. Hast du ein Modell trainiert?")
         return
-    model = YOLO(model_path)
-    results = model.predict(source=image_path)
-    return results
+
+    # model = YOLO(model_path)
+    model = YOLO('yolov8n.pt')
+
+    results = model.predict(source=image_path)[0]
+    class_names = model.names  # z. B. {0: "cannon", 1: "elixir", ...}
+
+    output = []
+    for box in results.boxes:
+        cls_id = int(box.cls[0].item())              # class index (int)
+        class_name = class_names[cls_id]             # class name (string)
+        conf = float(box.conf[0].item())             # confidence score
+        xyxy = box.xyxy[0].tolist()                  # bounding box [x1, y1, x2, y2]
+
+        output.append({
+            "class_id": cls_id,
+            "class_name": class_name,
+            "confidence": conf,
+            "bounding_box": (xyxy[0], xyxy[1], xyxy[2], xyxy[3])
+        })
+    print("writing to json: ", output)
+    write_data(output)
 
 parser = argparse.ArgumentParser(description="Trainings- und Vorhersagemodus für YOLO Modell")
 parser.add_argument('--predict', action='store_true', help='Mache eine Vorhersage')
@@ -55,8 +73,8 @@ if args.continue_train:
     continue_training(epochs=args.epochs)
 
 if args.predict:
-    pred = get_prediction(IMAGE_PATH)
-    print("Predictionsergebnis:", pred)
+    write_prediction_to_json(IMAGE_PATH)
 
-write_data(data)
+
+
 

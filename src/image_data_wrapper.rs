@@ -33,6 +33,7 @@ pub fn train_model(epochen: i32) {
 
 pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
     println!("Getting prediction from best model");
+
     let target = Path::new("Communication/screenshot.png");
 
     let res = fs::copy(screeenshot_path, target);
