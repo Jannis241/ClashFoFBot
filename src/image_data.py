@@ -6,6 +6,7 @@ import argparse
 
 def write_data(data):
     file_path = "Communication/data.json"
+    print("Writing data..")
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4)
@@ -33,7 +34,7 @@ def continue_training(model_path=BEST_MODEL_PATH, epochs: int = 50):
 
 def write_prediction_to_json(image_path, model_path=BEST_MODEL_PATH):
     print("Prediction mit Modell:", model_path)
-    print("Bild:", image_path)
+    print("Image path used for prediction:", image_path)
     if not os.path.exists(model_path):
         print("Modellpfad nicht gefunden. Hast du ein Modell trainiert?")
         return

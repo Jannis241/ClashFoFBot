@@ -28,7 +28,7 @@ pub fn train_model(epochen: i32) {
     {
         Ok(output) if output.status.success() => {
             println!("{}", String::from_utf8_lossy(&output.stdout));
-            println!("image_data.py executed without any problems.");
+            println!("image_data.py finished executing..");
         }
         Ok(output) => {
             eprintln!("Python error:");
@@ -41,6 +41,8 @@ pub fn train_model(epochen: i32) {
 }
 
 pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
+    fs::create_dir("Communication").expect("Failed to create Communication dir.");
+    println!("Creating Communication directory..");
     println!("Getting prediction from best model");
 
     let target = Path::new("Communication/screenshot.png");
@@ -62,7 +64,7 @@ pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
     {
         Ok(output) if output.status.success() => {
             println!("{}", String::from_utf8_lossy(&output.stdout));
-            println!("image_data.py executed without any problems.");
+            println!("image_data.py finished executing.");
         }
         Ok(output) => {
             eprintln!("Python error:");
@@ -74,6 +76,7 @@ pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
     }
 
     let file = File::open("Communication/data.json").expect("Konnte data.json nicht öffnen");
+    println!("Reading data.json..");
 
     let reader = BufReader::new(file);
 
@@ -84,6 +87,9 @@ pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
         .expect("Error while removing screenshot.png after model analyis. Something went wrong.");
     fs::remove_file(Path::new("Communication/data.json"))
         .expect("Error while removing data.json after model analyis. Something went wrong.");
+
+    fs::remove_dir("Communication").expect("failed to remove Communication dir");
+    println!("Removed temp Communication directory.");
 
     return buildings;
 }
