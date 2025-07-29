@@ -42,6 +42,7 @@ pub struct ScreenshotApp {
     pub image_folder: Option<PathBuf>,
     pub available_images: Vec<String>,
     pub epoche: String,
+    pub current_buildings: Option<Vec<image_data_wrapper::Building>>,
 
     current_train_thread: Option<std::thread::JoinHandle<()>>,
     active_tab: Tab,
@@ -67,6 +68,7 @@ impl Default for ScreenshotApp {
                 PathBuf::from_str("/home/jesko/programmieren/ClashFoFBot/images").unwrap(),
             ),
             epoche: "".to_string(),
+            current_buildings: None,
             current_train_thread: None,
             available_images: vec![],
             active_tab: Tab::Settings,
@@ -323,6 +325,7 @@ impl eframe::App for ScreenshotApp {
                             if ui.selectable_label(is_selected, label).clicked() {
                                 self.selected_image = Some(img.clone());
                                 self.image_texture = None;
+                                self.current_buildings = None;
                             }
                         }
                     });
@@ -361,14 +364,20 @@ impl eframe::App for ScreenshotApp {
 
                                 // Bounding Boxes zeichnen
                                 if let Some(image_path) = &self.selected_image {
-                                    let gebaude =
-                                        image_data_wrapper::get_buildings(Path::new(image_path));
+                                    if self.current_buildings.is_none() {
+                                        self.current_buildings =
+                                            Some(image_data_wrapper::get_buildings(Path::new(
+                                                image_path,
+                                            )));
+                                    }
+
+                                    let buildings = self.current_buildings.clone().unwrap();
 
                                     // Ursprungs-Rechteck des Bildes im UI
                                     let rect = response.rect;
 
                                     // Koordinaten-Umrechnung: (0..1) → Bildschirm
-                                    for building in gebaude {
+                                    for building in buildings {
                                         let (x, y, w, h) = building.bounding_box;
 
                                         // Bounding-Box-Koordinaten relativ zum Bild (normalisiert oder nicht?)

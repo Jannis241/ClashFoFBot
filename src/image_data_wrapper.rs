@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Building {
     pub class_id: i32,
     pub class_name: String,
