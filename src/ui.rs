@@ -162,7 +162,7 @@ impl eframe::App for ScreenshotApp {
                     self.active_tab = Tab::YoloLabel;
                 }
                 if ui
-                    .selectable_label(self.active_tab == Tab::Model, "Model")
+                    .selectable_label(self.active_tab == Tab::Model, "|| Model")
                     .clicked()
                 {
                     self.active_tab = Tab::Model;
@@ -286,7 +286,144 @@ impl eframe::App for ScreenshotApp {
                             }
                         }
                     });
+                    ui.collapsing("🖼️ Model Testen -Bild Auswählen", |ui| {
+                        if ui.button("📂 Test Ordner wählen").clicked() {
+                            if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                self.image_folder = Some(path.clone());
+                                self.image_texture = None;
+                            }
+                        }
+
+                        if let Some(folder) = &self.image_folder {
+                            ui.label(format!("📁 Test Ordner: {}", folder.display()));
+                        }
+
+                        self.update_image_list();
+
+                        for img in &self.available_images {
+                            let filename = Path::new(img)
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy();
+
+                            let in_dataset = self.is_image_in_dataset(&filename);
+                            let is_selected = self.selected_image.as_deref() == Some(img);
+
+                            // Farbe festlegen
+                            let color = if is_selected {
+                                egui::Color32::from_rgb(100, 150, 255) // blau
+                            } else if in_dataset {
+                                egui::Color32::from_rgb(0, 200, 100) // grün
+                            } else {
+                                egui::Color32::from_rgb(200, 50, 50) // rot
+                            };
+
+                            let label = egui::RichText::new(filename).color(color);
+
+                            if ui.selectable_label(is_selected, label).clicked() {
+                                self.selected_image = Some(img.clone());
+                                self.image_texture = None;
+                            }
+                        }
+                    });
+                    ui.collapsing("Model testen -Visual", |ui: &mut egui::Ui| {
+                        if let Some(selected) = &self.selected_image {
+                            // Bild laden & in Texture umwandeln
+                            if self.image_texture.is_none() {
+                                if let Ok(img) = image::open(selected) {
+                                    let img = img.to_rgba8();
+                                    let size = [img.width() as usize, img.height() as usize];
+                                    let color_img = egui::ColorImage::from_rgba_unmultiplied(
+                                        size,
+                                        &img.into_raw(),
+                                    );
+                                    self.image_texture = Some(ctx.load_texture(
+                                        "selected_image",
+                                        color_img,
+                                        Default::default(),
+                                    ));
+                                }
+                            }
+
+                            if let Some(texture) = &self.image_texture {
+                                let available_size = ui.available_size();
+                                let tex_size =
+                                    egui::vec2(texture.size()[0] as f32, texture.size()[1] as f32);
+
+                                // Seitenverhältnis beibehalten
+                                let scale = (available_size.x / tex_size.x)
+                                    .min(available_size.y / tex_size.y);
+                                let final_size = tex_size * scale;
+
+                                // Bild anzeigen
+                                let img = egui::Image::new(texture).fit_to_exact_size(final_size);
+                                let response = ui.add(img);
+
+                                // Bounding Boxes zeichnen
+                                if let Some(image_path) = &self.selected_image {
+                                    let gebaude =
+                                        image_data_wrapper::get_buildings(Path::new(image_path));
+
+                                    // Ursprungs-Rechteck des Bildes im UI
+                                    let rect = response.rect;
+
+                                    // Koordinaten-Umrechnung: (0..1) → Bildschirm
+                                    for building in gebaude {
+                                        let (x, y, w, h) = building.bounding_box;
+
+                                        // Bounding-Box-Koordinaten relativ zum Bild (normalisiert oder nicht?)
+                                        // Wenn Koordinaten in Pixeln: einfach *scale
+                                        // Wenn sie normalisiert (0.0..1.0) sind: * tex_size und dann *scale
+                                        // Wir nehmen an: sie sind in Pixeln
+
+                                        let top_left = egui::pos2(
+                                            rect.left() + x * scale,
+                                            rect.top() + y * scale,
+                                        );
+                                        let bottom_right = egui::pos2(
+                                            rect.left() + (x + w) * scale,
+                                            rect.top() + (y + h) * scale,
+                                        );
+                                        let bounding_rect =
+                                            egui::Rect::from_min_max(top_left, bottom_right);
+
+                                        // Farbe pro class_id (einfach ein paar Beispiele)
+                                        let color = match building.class_id {
+                                            0 => Color32::LIGHT_BLUE,
+                                            1 => Color32::LIGHT_RED,
+                                            2 => Color32::LIGHT_GREEN,
+                                            _ => Color32::WHITE,
+                                        };
+
+                                        // Rechteck zeichnen
+                                        ui.painter().rect_stroke(
+                                            bounding_rect,
+                                            0.0,
+                                            egui::Stroke::new(2.0, color),
+                                            StrokeKind::Middle,
+                                        );
+
+                                        // Label-Text (oben links)
+                                        let label_text = format!(
+                                            "ID: {} ({:.0}%)",
+                                            building.class_id,
+                                            building.confidence * 100.0
+                                        );
+
+                                        ui.painter().text(
+                                            top_left,
+                                            egui::Align2::LEFT_TOP,
+                                            label_text,
+                                            egui::TextStyle::Body.resolve(ui.style()),
+                                            color,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    });
                 }
+
                 Tab::YoloLabel => {
                     if let Some(selected) = &self.selected_image {
                         // Bild laden & in Texture umwandeln

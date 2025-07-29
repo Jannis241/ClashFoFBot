@@ -8,5 +8,6 @@ mod settings_manager;
 mod ui;
 
 fn main() {
+    ui::start_ui();
     debug::run_tests();
 }
