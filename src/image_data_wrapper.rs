@@ -8,6 +8,15 @@ pub struct Building {
     pub bounding_box: (f32, f32, f32, f32),
 }
 
+pub fn get_avg_confidence(buildings: &Vec<Building>) -> f32 {
+    let mut sum = 0.0;
+
+    for building in buildings {
+        sum += building.confidence;
+    }
+    return sum / buildings.len() as f32;
+}
+
 pub fn train_model(epochen: i32) {
     println!("Training model..");
     match Command::new("python3")
