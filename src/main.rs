@@ -1,5 +1,6 @@
 use crate::prelude::*;
 mod bot_actions;
+mod data_augmentation;
 mod debug;
 mod image_data_wrapper;
 mod prelude;
