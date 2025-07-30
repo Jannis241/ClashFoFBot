@@ -17,11 +17,51 @@ pub fn get_avg_confidence(buildings: &Vec<Building>) -> f32 {
     return sum / buildings.len() as f32;
 }
 
-pub fn train_model(epochen: i32) {
+pub fn create_model(model_name: String, yolo_model: String) {
+    println!("Creating model");
+    match Command::new("python3")
+        .arg("src/image_data.py")
+        .arg("--create-model")
+        .arg("--base")
+        .arg(yolo_model.to_string())
+        .arg("--model-name")
+        .arg(model_name.to_string())
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            println!("{}", String::from_utf8_lossy(&output.stdout));
+            println!("image_data.py finished executing..");
+        }
+        Ok(output) => {
+            eprintln!("Python error:");
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+        }
+        Err(e) => {
+            eprintln!("Failed to start process: {}", e);
+        }
+    }
+}
+
+pub fn delete_model(model_name: String) {
+    println!("deleting model '{}'..", model_name);
+    let path = format!("runs/detect/{}", model_name);
+
+    if fs::exists(&path).unwrap() {
+        println!("Found Model! Deleting it now..");
+        fs::remove_dir_all(&path);
+        println!("Successfully deleted {}", path);
+    } else {
+        eprintln!("Error: Did not found {}", &path);
+    }
+}
+
+pub fn train_model(model_name: String, epochen: i32) {
     println!("Training model..");
     match Command::new("python3")
         .arg("src/image_data.py")
-        .arg("--continue-train")
+        .arg("--train")
+        .arg("--model-name")
+        .arg(model_name.to_string())
         .arg("--epochs")
         .arg(epochen.to_string())
         .output()
@@ -40,10 +80,13 @@ pub fn train_model(epochen: i32) {
     }
 }
 
-pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
+pub fn get_buildings(model_name: String, screeenshot_path: &Path) -> Vec<Building> {
+    println!("Bekomme Prediction von {}", model_name);
+    if fs::exists("Communication").unwrap() {
+        fs::remove_dir_all("Communication");
+    }
     fs::create_dir("Communication").expect("Failed to create Communication dir.");
     println!("Creating Communication directory..");
-    println!("Getting prediction from best model");
 
     let target = Path::new("Communication/screenshot.png");
 
@@ -60,6 +103,8 @@ pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
     match Command::new("python3")
         .arg("src/image_data.py")
         .arg("--predict")
+        .arg("--model-name")
+        .arg(model_name.to_string())
         .output()
     {
         Ok(output) if output.status.success() => {
@@ -88,7 +133,7 @@ pub fn get_buildings(screeenshot_path: &Path) -> Vec<Building> {
     fs::remove_file(Path::new("Communication/data.json"))
         .expect("Error while removing data.json after model analyis. Something went wrong.");
 
-    fs::remove_dir("Communication").expect("failed to remove Communication dir");
+    fs::remove_dir_all("Communication").expect("failed to remove Communication dir");
     println!("Removed temp Communication directory.");
 
     return buildings;

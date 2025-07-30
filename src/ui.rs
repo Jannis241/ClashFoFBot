@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::{image_data_wrapper::Building, prelude::*};
 
 pub fn start_ui() {
     let options = eframe::NativeOptions::default();
@@ -283,7 +283,7 @@ impl eframe::App for ScreenshotApp {
                             {
                                 if let Ok(e) = self.epoche.trim().parse::<i32>() {
                                     let handle = std::thread::spawn(move || {
-                                        image_data_wrapper::train_model(e);
+                                        // image_data_wrapper::train_model(e);
                                     });
                                     self.current_train_thread = Some(handle);
                                 }
@@ -368,9 +368,10 @@ impl eframe::App for ScreenshotApp {
                                 if let Some(image_path) = &self.selected_image {
                                     if self.current_buildings.is_none() {
                                         self.current_buildings =
-                                            Some(image_data_wrapper::get_buildings(Path::new(
-                                                image_path,
-                                            )));
+                                            Some(image_data_wrapper::get_buildings(
+                                                String::new(),
+                                                Path::new(image_path),
+                                            ));
                                     }
 
                                     let mut buildings = self.current_buildings.clone().unwrap();

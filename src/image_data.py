@@ -26,32 +26,25 @@ def train_model(model_name, epochen):
     model_path = f"runs/detect/{model_name}/weights/best.pt"
     if not os.path.exists(model_path):
         print(f"Modell {model_name} wurde nicht unter {model_path} gefunden. Training wird abgebrochen..")
+        print("FAILED!!")
         return
 
     print("Modell gefunden:", model_path)
     print(f"Starte training.. ({epochen}Epochen)")
     model = YOLO(model_path)
-    model.train(data=DATA_YAML, epochs=epochen, name = "fufu")
+    model.train(data=DATA_YAML, epochs=epochen, name=model_name, exist_ok=True)
+
     print("Training erfolgreich abgeschlossen.")
 
-def delete_model(model_name):
-    print(f"Trying to delete model '{model_name}'")
-    model_path = f"runs/detect/{model_name}/weights/best.pt"
-
-    if os.path.exists(model_path):
-        print(f"Deleting model '{model_name}' from {model_path}")
-        os.remove(model_path)
-        return
-
-    print(f"Failed: Modell '{model_name}' nicht gefunden. Stelle sicher, dass das model unter {model_path} exisitert.")
 
 
-def write_prediction_to_json(image_path, model_name):
+def write_prediction_to_json(model_name, image_path):
 
     model_path = f"runs/detect/{model_name}/weights/best.pt"
 
     if not os.path.exists(model_path):
         print(f"Modell {model_name} wurde nicht unter {model_path} gefunden. Stelle sicher, dass das Model '{model_name}' unter {model_path} liegt.")
+        print("FAILED!!")
         return
 
     print(f"Modell für die prediction: {model_name} ({model_path})")
@@ -84,11 +77,9 @@ parser = argparse.ArgumentParser(description="Trainings- und Vorhersagemodus fü
 parser.add_argument('--create-model', action='store_true', help='Erstelle ein neues Modell mit einem bestimmten Namen')
 parser.add_argument('--train', action='store_true', help='Starte ein neues Training')
 parser.add_argument('--predict', action='store_true', help='Mache eine Vorhersage mit dem Modell')
-parser.add_argument('--delete-model', action='store_true', help='Lösche ein Modellverzeichnis')
 parser.add_argument('--model-name', type=str, default=None, help='Name des Modells / Verzeichnisses')
 parser.add_argument('--epochs', type=int, default=None, help='Anzahl der Trainings-Epochen')
 parser.add_argument('--base', type=str, default=None, help='YOLO-Modellbasis (z. B. yolov8n.pt, yolov8s.pt)')
-parser.add_argument('--image_path', type=str, default=None, help='Image path')
 
 
 args = parser.parse_args()
@@ -103,7 +94,5 @@ if args.train:
     train_model(args.model_name, epochs)
 
 if args.predict:
-    write_prediction_to_json(args.model_name, args.image_path)
+    write_prediction_to_json(args.model_name, "Communication/screenshot.png")
 
-if args.delete_model:
-    delete_model(args.model_name)
