@@ -9,14 +9,14 @@ pub trait AutoThread: Send + 'static {
 
 #[macro_export]
 macro_rules! auto_set_field {
-    ($field_name:literal, |$arg:ident : $ty:ty| $body:expr) => {{
-        if field == $field_name {
-            if let Ok($arg) = value.downcast::<$ty>() {
+    ($field:expr, $value:expr, $field_name:literal, |$arg:ident : $ty:ty| $body:expr) => {
+        if $field == $field_name {
+            if let Ok($arg) = $value.downcast::<$ty>() {
                 $body;
                 return true;
             }
         }
-    }};
+    };
 }
 
 /// Thread-Wrapper

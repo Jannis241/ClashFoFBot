@@ -1,4 +1,6 @@
-use crate::{image_data_wrapper::Building, prelude::*};
+use eframe::egui::Widget;
+
+use crate::{image_data_wrapper::Building, prelude::*, threading::AutoThread};
 
 pub fn start_ui() {
     let options = eframe::NativeOptions::default();
@@ -41,7 +43,7 @@ struct TrainThread {
 
 impl threading::AutoThread for TrainThread {
     fn run(&mut self) {
-        image_data_wrapper::train_model(1);
+        // image_data_wrapper::train_model(1);
     }
     fn set_field_any(&mut self, field: &str, value: Box<dyn std::any::Any>) -> bool {
         panic!("shouldnt set any fields")
@@ -58,10 +60,12 @@ struct GetBuildingsThread {
 
 impl threading::AutoThread for GetBuildingsThread {
     fn run(&mut self) {
-        self.buildings = image_data_wrapper::get_buildings(&Path::new(&self.path_to_image));
+        // self.buildings = image_data_wrapper::get_buildings(&Path::new(&self.path_to_image));
     }
     fn set_field_any(&mut self, field: &str, value: Box<dyn std::any::Any>) -> bool {
-        auto_set_field!("path_to_image", |val: String| self.path_to_image = val);
+        auto_set_field!(field, value, "path_to_image", |val: String| self
+            .path_to_image =
+            *val);
 
         false
     }
@@ -81,6 +85,9 @@ pub struct ScreenshotApp {
     pub available_images: Vec<String>,
     pub epoche: String,
     pub current_buildings: Option<Vec<image_data_wrapper::Building>>,
+
+    pub labeling_que: Vec<String>,
+    selected_images: HashSet<String>,
 
     train_threads: Vec<TrainThread>,
     get_building_thread: GetBuildingsThread,
@@ -107,6 +114,7 @@ impl Default for ScreenshotApp {
             image_folder: Some(
                 PathBuf::from_str("/home/jesko/programmieren/ClashFoFBot/images").unwrap(),
             ),
+            selected_images: HashSet::new(),
             epoche: "".to_string(),
             current_buildings: None,
 
@@ -115,6 +123,7 @@ impl Default for ScreenshotApp {
                 path_to_image: "".to_string(),
                 buildings: vec![],
             },
+            labeling_que: vec![],
 
             available_images: vec![],
             active_tab: Tab::Settings,
@@ -216,7 +225,9 @@ impl ScreenshotApp {
     }
 
     fn keybinds(&mut self, ui: &mut egui::Ui) {
-        ui.collapsing("Keybinds", |ui| {
+        ui.group(|ui| {
+            ui.heading("Settings");
+            ui.separator();
             ui.horizontal(|ui| {
                 ui.label("Screenshot-Key:");
                 ui.text_edit_singleline(&mut self.keybind);
@@ -243,11 +254,6 @@ impl ScreenshotApp {
                 self.update_image_list();
             }
         });
-        ui.collapsing("Png Wählen (zum labeln und zum testen))", |ui| {
-            self.ordner_wählen(ui);
-            self.update_image_list();
-            self.show_available_pngs(ui);
-        });
     }
 
     fn take_labeled_screenshot(&mut self) {
@@ -264,7 +270,10 @@ impl ScreenshotApp {
     }
 
     fn ordner_wählen(&mut self, ui: &mut egui::Ui) {
-        if ui.button("📂 Ordner wählen").clicked() {
+        if ui
+            .button("📂 Speicher Ordner der Screenshots wählen")
+            .clicked()
+        {
             if let Some(path) = rfd::FileDialog::new().pick_folder() {
                 self.image_folder = Some(path.clone());
                 self.image_texture = None;
@@ -272,12 +281,15 @@ impl ScreenshotApp {
         }
 
         if let Some(folder) = &self.image_folder {
-            ui.label(format!("📁 Ordner: {}", folder.display()));
+            ui.label(format!(
+                "📁 Speicher Ordner der Screenshots: {}",
+                folder.display()
+            ));
         }
     }
 
     fn show_available_pngs(&mut self, ui: &mut egui::Ui) {
-        egui::ComboBox::from_label("Bild auswählen")
+        let resp = egui::ComboBox::from_label("Bild auswählen")
             .selected_text(
                 self.selected_image
                     .as_ref()
@@ -317,6 +329,422 @@ impl ScreenshotApp {
                     }
                 }
             });
+
+        if resp.response.changed() {
+            self.get_building_thread.set_field_any(
+                "path_to_image",
+                Box::new(self.selected_image.clone().unwrap()),
+            );
+        }
+    }
+
+    fn update_image_texture(&mut self, ctx: &egui::Context, selected: String) {
+        if self.image_texture.is_none() {
+            if let Ok(img) = image::open(selected) {
+                let img = img.to_rgba8();
+                let size = [img.width() as usize, img.height() as usize];
+                let color_img = egui::ColorImage::from_rgba_unmultiplied(size, &img.into_raw());
+                self.image_texture =
+                    Some(ctx.load_texture("selected_image", color_img, Default::default()));
+            }
+        }
+    }
+
+    fn get_scaled_texture(
+        &self,
+        ui: &mut egui::Ui,
+        texture: &egui::TextureHandle,
+    ) -> (egui::Image, f32) {
+        let available_size = ui.available_size();
+        let tex_size = egui::vec2(texture.size()[0] as f32, texture.size()[1] as f32);
+
+        // Seitenverhältnis beibehalten
+        let scale = (available_size.x / tex_size.x).min(available_size.y / tex_size.y);
+        let final_size = tex_size * scale;
+
+        // Bild anzeigen
+        (
+            egui::Image::new(texture).fit_to_exact_size(final_size),
+            scale,
+        )
+    }
+
+    fn draw_buildings(
+        &self,
+        ui: &mut egui::Ui,
+        buildings: Vec<Building>,
+        rect: egui::Rect,
+        scale: f32,
+    ) {
+        for building in buildings {
+            let (x, y, w, h) = building.bounding_box;
+
+            let top_left = egui::pos2(rect.left() + x * scale, rect.top() + y * scale);
+            let bottom_right = egui::pos2(rect.left() + w * scale, rect.top() + h * scale);
+
+            let bounding_rect = egui::Rect::from_min_max(top_left, bottom_right);
+
+            let color = Color32::RED;
+
+            ui.painter().rect_stroke(
+                bounding_rect,
+                0.0,
+                egui::Stroke::new(2.0, color),
+                StrokeKind::Middle,
+            );
+
+            let label_text = format!(
+                "{} ({:.0}%)",
+                building.class_name,
+                building.confidence * 100.0
+            );
+
+            ui.painter().text(
+                top_left,
+                egui::Align2::LEFT_TOP,
+                label_text,
+                egui::TextStyle::Body.resolve(ui.style()),
+                color,
+            );
+        }
+    }
+
+    fn model(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        ui.collapsing("Training", |ui: &mut egui::Ui| {});
+        ui.collapsing("Model testen", |ui: &mut egui::Ui| {
+            if let Some(selected) = &self.selected_image {
+                self.update_image_texture(ctx, selected.to_string());
+
+                if let Some(texture) = &self.image_texture {
+                    let (img, scale) = self.get_scaled_texture(ui, texture);
+                    let response = ui.add(img);
+
+                    let buildings: Vec<Building> = self
+                        .get_building_thread
+                        .get_field_any("buildings")
+                        .unwrap()
+                        .downcast_ref::<Vec<Building>>()
+                        .unwrap()
+                        .to_vec();
+
+                    let rect = response.rect;
+                    self.draw_buildings(ui, buildings, rect, scale);
+                }
+            }
+        });
+    }
+
+    fn handel_labeling_cursor(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
+        // Cursor-Position innerhalb des Bildes ermitteln
+        let cursor_pos = ui.ctx().input(|i| i.pointer.hover_pos());
+        let cursor_over_image = cursor_pos.map_or(false, |pos| rect.contains(pos));
+
+        let pointer_pos = ui.input(|i| i.pointer.hover_pos());
+
+        if cursor_over_image {
+            let pointer_down = ui.input(|i| i.pointer.primary_down());
+            let pointer_clicked = ui.input(|i| i.pointer.primary_clicked());
+            let pointer_released = ui.input(|i| i.pointer.primary_released());
+
+            if pointer_clicked {
+                self.current_rect_start = pointer_pos;
+                self.current_rect_end = self.current_rect_start;
+            }
+            // Ziehen
+            if pointer_down {
+                if self.current_rect_start.is_none() {
+                    self.current_rect_start = pointer_pos;
+                }
+                self.current_rect_end = pointer_pos;
+            }
+            // Loslassen
+            if pointer_released {
+                if let (Some(start), Some(end)) = (self.current_rect_start, self.current_rect_end) {
+                    let rect = egui::Rect::from_two_pos(start, end).expand(2.0);
+                    self.labeled_rects.push(LabeledRect {
+                        rect,
+                        label: String::new(),
+                    });
+
+                    self.current_rect_end = None;
+                    self.current_rect_start = None;
+                }
+            }
+        }
+    }
+    fn add_lable_to_yaml(&mut self, ctx: &egui::Context) {
+        if self.current_rect_start.is_none() {
+            if let Some(r) = self.labeled_rects.last_mut() {
+                // Lade bekannte Klassen aus data.yaml
+                let yaml_path = std::path::Path::new("dataset/data.yaml");
+                let yaml_content = std::fs::read_to_string(yaml_path).unwrap_or_default();
+
+                #[derive(Deserialize)]
+                struct DataYaml {
+                    names: std::collections::HashMap<usize, String>,
+                }
+
+                let class_names: Vec<String> =
+                    if let Ok(data) = serde_yaml::from_str::<DataYaml>(&yaml_content) {
+                        data.names.values().cloned().collect()
+                    } else {
+                        vec![]
+                    };
+
+                for event in &ctx.input(|i| i.events.clone()) {
+                    match event {
+                        egui::Event::Text(text) => {
+                            r.label.push_str(text);
+                        }
+                        egui::Event::Key {
+                            key, pressed: true, ..
+                        } => match key {
+                            egui::Key::Backspace => {
+                                r.label.pop();
+                            }
+                            egui::Key::Tab => {
+                                let trimmed = r.label.trim();
+                                let matches: Vec<&String> = class_names
+                                    .iter()
+                                    .filter(|name| name.starts_with(trimmed))
+                                    .collect();
+
+                                if matches.len() == 1 {
+                                    r.label = matches[0].clone();
+                                }
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    fn save_labeld_rects(&mut self, final_size: egui::Vec2) {
+        if let Some(image_path) = &self.labeling_que.last() {
+            println!("📦 Speichere YOLO-Labels...");
+
+            use std::collections::HashMap;
+            use std::fs;
+            use std::io::Write;
+            use std::path::Path;
+
+            #[derive(Debug, Deserialize, Serialize)]
+            struct DataYaml {
+                train: String,
+                val: String,
+                names: HashMap<usize, String>,
+            }
+
+            let yaml_path = Path::new("dataset/data.yaml");
+            let yaml_content =
+                fs::read_to_string(yaml_path).expect("❌ Kann data.yaml nicht lesen");
+            let mut data: DataYaml =
+                serde_yaml::from_str(&yaml_content).expect("❌ Kann data.yaml nicht parsen");
+
+            // Umgekehrtes Mapping: Label → ID
+            let mut class_map: HashMap<String, usize> =
+                data.names.iter().map(|(k, v)| (v.clone(), *k)).collect();
+
+            let w = final_size.x;
+            let h = final_size.y;
+
+            // Zielordner zufällig: train oder val
+            let mut rng = rand::thread_rng();
+            let is_train = rng.gen_bool(0.8); // 80% train
+            let (img_target, label_target) = if is_train {
+                (
+                    Path::new("dataset/images/train"),
+                    Path::new("dataset/labels/train"),
+                )
+            } else {
+                (
+                    Path::new("dataset/images/val"),
+                    Path::new("dataset/labels/val"),
+                )
+            };
+
+            // Datei kopieren
+            let filename = Path::new(image_path).file_name().unwrap().to_str().unwrap();
+
+            let target_img_path = img_target.join(filename);
+            fs::create_dir_all(img_target).unwrap();
+            fs::copy(image_path, &target_img_path).expect("❌ Bild konnte nicht kopiert werden");
+
+            // Label-Datei schreiben
+            let label_path = label_target.join(filename.replace(".png", ".txt"));
+            fs::create_dir_all(label_target).unwrap();
+
+            let mut label_file =
+                fs::File::create(&label_path).expect("❌ Konnte .txt nicht schreiben");
+
+            let mut yaml_updated = false;
+
+            for lr in &self.labeled_rects {
+                let label = lr.label.trim().to_string();
+
+                // Wenn Klasse nicht existiert, hinzufügen
+                let class_id = if let Some(id) = class_map.get(&label) {
+                    *id
+                } else {
+                    let new_id = data.names.len();
+                    data.names.insert(new_id, label.clone());
+                    class_map.insert(label.clone(), new_id);
+                    yaml_updated = true;
+                    new_id
+                };
+
+                let x = (lr.rect.min.x + lr.rect.max.x) / 2.0 / w as f32;
+                let y = (lr.rect.min.y + lr.rect.max.y) / 2.0 / h as f32;
+                let bw = (lr.rect.max.x - lr.rect.min.x) / w as f32;
+                let bh = (lr.rect.max.y - lr.rect.min.y) / h as f32;
+
+                writeln!(
+                    label_file,
+                    "{} {:.6} {:.6} {:.6} {:.6}",
+                    class_id, x, y, bw, bh
+                )
+                .expect("❌ Schreiben fehlgeschlagen");
+            }
+
+            // YAML zurückschreiben, wenn geändert
+            if yaml_updated {
+                let new_yaml =
+                    serde_yaml::to_string(&data).expect("❌ Fehler beim YAML-Serialisieren");
+                fs::write(yaml_path, new_yaml).expect("❌ Fehler beim Schreiben von data.yaml");
+                println!("📄 Neue Labels wurden zu data.yaml hinzugefügt.");
+            }
+
+            println!("✅ YOLO-Label gespeichert: {}", label_path.display());
+            self.labeled_rects.clear(); // fertig gelabelt
+        }
+    }
+
+    fn draw_rects(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        // Rechtecke zeichnen
+        let painter = ui.painter();
+
+        for lr in &self.labeled_rects {
+            painter.rect_stroke(lr.rect, 0.0, (2.0, egui::Color32::RED), StrokeKind::Middle);
+            painter.text(
+                lr.rect.left_top(),
+                egui::Align2::LEFT_TOP,
+                &lr.label,
+                egui::TextStyle::Body.resolve(&ctx.style()),
+                egui::Color32::RED,
+            );
+        }
+
+        if let (Some(start), Some(current)) = (self.current_rect_start, self.current_rect_end) {
+            let rect = egui::Rect::from_two_pos(start, current);
+            painter.rect_stroke(rect, 0.0, (1.0, egui::Color32::GREEN), StrokeKind::Middle);
+        }
+    }
+
+    fn show_available_pngs_multiple(&mut self, ui: &mut egui::Ui) {
+        ui.label("Bilder auswählen:");
+        egui::ScrollArea::vertical()
+            .max_height(1000.0)
+            .show(ui, |ui| {
+                for img in &self.available_images {
+                    let filename = Path::new(img)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+
+                    let in_dataset = self.is_image_in_dataset(&filename);
+                    let is_selected = self.selected_images.contains(img);
+
+                    let color = if is_selected {
+                        egui::Color32::from_rgb(100, 150, 255) // blau
+                    } else if in_dataset {
+                        egui::Color32::from_rgb(0, 200, 100) // grün
+                    } else {
+                        egui::Color32::from_rgb(200, 50, 50) // rot
+                    };
+
+                    let label = RichText::new(&filename).color(color);
+
+                    if ui.selectable_label(is_selected, label).clicked() {
+                        if is_selected {
+                            self.selected_images.remove(img);
+                        } else {
+                            self.selected_images.insert(img.clone());
+                        }
+                        self.image_texture = None; // Optional: bei Änderung neuladen
+                    }
+                }
+            });
+    }
+
+    fn session_button(&mut self, ui: &mut egui::Ui) {
+        let is_running = !self.labeling_que.is_empty();
+
+        let (button_text, button_color) = if is_running {
+            ("Stop Session", Color32::from_rgb(200, 50, 50)) // rot
+        } else {
+            ("Start Session", Color32::from_rgb(0, 200, 100)) // grün
+        };
+
+        if ui
+            .add(
+                egui::Button::new(RichText::new(button_text).color(Color32::BLACK))
+                    .fill(button_color)
+                    .min_size(egui::vec2(150.0, 30.0)),
+            )
+            .clicked()
+        {
+            if is_running {
+                self.labeling_que.clear();
+            } else {
+                self.labeling_que = self.selected_images.iter().cloned().collect();
+            }
+        }
+    }
+
+    fn yolo_label(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let is_running = !self.labeling_que.is_empty();
+
+        if !is_running {
+            ui.group(|ui| {
+                ui.heading("Png(s) Zum Labeln Wählen");
+                ui.separator();
+                self.ordner_wählen(ui);
+                self.update_image_list();
+                self.show_available_pngs_multiple(ui);
+            });
+        }
+
+        self.session_button(ui);
+
+        if is_running {
+            if let Some(selected) = self.labeling_que.last() {
+                self.update_image_texture(ctx, selected.to_string());
+
+                if let Some(texture) = &self.image_texture {
+                    let (img, scale) = self.get_scaled_texture(ui, texture);
+                    let response = ui.add(img);
+
+                    // Das gezeichnete Rechteck
+                    let rect = response.rect;
+                    self.handel_labeling_cursor(ui, rect);
+                    self.add_lable_to_yaml(ctx);
+
+                    if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        self.save_labeld_rects(rect.size());
+                        self.labeling_que.pop();
+                        self.image_texture = None;
+                    }
+
+                    self.draw_rects(ui, ctx);
+                }
+            } else {
+                ui.label("Kein Bild ausgewählt.");
+            }
+        }
     }
 }
 
@@ -335,465 +763,10 @@ impl eframe::App for ScreenshotApp {
                     self.keybinds(ui);
                 }
                 Tab::Model => {
-                    ui.collapsing("Training", |ui: &mut egui::Ui| {
-                        // Eingabe für Epochen
-                        ui.horizontal(|ui| {
-                            ui.label("Epochen:");
-                            ui.text_edit_singleline(&mut self.epoche);
-                        });
-
-                        if let Some(t) = &self.current_train_thread {
-                            if t.is_finished() {
-                                self.current_train_thread = None;
-                            }
-                            // Statt Button: Info-Text in Gelb
-                            ui.label(RichText::new("Training läuft...").color(Color32::YELLOW));
-                        } else {
-                            // Start-Button (grün)
-                            if ui
-                                .add(egui::Button::new(
-                                    RichText::new("Start Träning")
-                                        .color(Color32::WHITE)
-                                        .background_color(Color32::GREEN),
-                                ))
-                                .clicked()
-                            {
-                                if let Ok(e) = self.epoche.trim().parse::<i32>() {
-                                    let handle = std::thread::spawn(move || {
-                                        // image_data_wrapper::train_model(e);
-                                    });
-                                    self.current_train_thread = Some(handle);
-                                }
-                            }
-                        }
-                    });
-                    ui.collapsing("🖼️ Model Testen -Bild Auswählen", |ui| {
-                        if ui.button("📂 Test Ordner wählen").clicked() {
-                            if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                                self.image_folder = Some(path.clone());
-                                self.image_texture = None;
-                            }
-                        }
-
-                        if let Some(folder) = &self.image_folder {
-                            ui.label(format!("📁 Test Ordner: {}", folder.display()));
-                        }
-
-                        self.update_image_list();
-
-                        for img in &self.available_images {
-                            let filename = Path::new(img)
-                                .file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy();
-
-                            let in_dataset = self.is_image_in_dataset(&filename);
-                            let is_selected = self.selected_image.as_deref() == Some(img);
-
-                            // Farbe festlegen
-                            let color = if is_selected {
-                                egui::Color32::from_rgb(100, 150, 255) // blau
-                            } else if in_dataset {
-                                egui::Color32::from_rgb(0, 200, 100) // grün
-                            } else {
-                                egui::Color32::from_rgb(200, 50, 50) // rot
-                            };
-
-                            let label = egui::RichText::new(filename).color(color);
-
-                            if ui.selectable_label(is_selected, label).clicked() {
-                                self.selected_image = Some(img.clone());
-                                self.image_texture = None;
-                                self.current_buildings = None;
-                            }
-                        }
-                    });
-                    ui.collapsing("Training", |ui: &mut egui::Ui| {});
-                    ui.collapsing("Model testen -Visual", |ui: &mut egui::Ui| {
-                        if let Some(selected) = &self.selected_image {
-                            // Bild laden & in Texture umwandeln
-                            if self.image_texture.is_none() {
-                                if let Ok(img) = image::open(selected) {
-                                    let img = img.to_rgba8();
-                                    let size = [img.width() as usize, img.height() as usize];
-                                    let color_img = egui::ColorImage::from_rgba_unmultiplied(
-                                        size,
-                                        &img.into_raw(),
-                                    );
-                                    self.image_texture = Some(ctx.load_texture(
-                                        "selected_image",
-                                        color_img,
-                                        Default::default(),
-                                    ));
-                                }
-                            }
-
-                            if let Some(texture) = &self.image_texture {
-                                let available_size = ui.available_size();
-                                let tex_size =
-                                    egui::vec2(texture.size()[0] as f32, texture.size()[1] as f32);
-
-                                // Seitenverhältnis beibehalten
-                                let scale = (available_size.x / tex_size.x)
-                                    .min(available_size.y / tex_size.y);
-                                let final_size = tex_size * scale;
-
-                                // Bild anzeigen
-                                let img = egui::Image::new(texture).fit_to_exact_size(final_size);
-                                let response = ui.add(img);
-
-                                // Bounding Boxes zeichnen
-                                if let Some(image_path) = &self.selected_image {
-                                    if self.current_buildings.is_none() {
-                                        self.current_buildings = Some(
-                                            image_data_wrapper::get_buildings(
-                                                String::new(),
-                                                Path::new(image_path),
-                                            )
-                                            .0,
-                                        )
-                                    }
-
-                                    let mut buildings = self.current_buildings.clone().unwrap();
-
-                                    // buildings.push(image_data_wrapper::Building {
-                                    //     class_id: 2,
-                                    //     class_name: "luft".to_string(),
-                                    //     confidence: 0.543,
-                                    //     bounding_box: (0.5, 0.5, 0.5, 0.5),
-                                    // });
-
-                                    // Ursprungs-Rechteck des Bildes im UI
-                                    let rect = response.rect;
-
-                                    // Koordinaten-Umrechnung: (0..1) → Bildschirm
-                                    for building in buildings {
-                                        let (x, y, w, h) = building.bounding_box;
-
-                                        // let x = x * tex_size.x;
-                                        // let y = y * tex_size.y;
-                                        // let w = w * tex_size.x;
-                                        // let h = h * tex_size.y;
-
-                                        // Bounding-Box-Koordinaten relativ zum Bild (normalisiert oder nicht?)
-                                        // Wenn Koordinaten in Pixeln: einfach *scale
-                                        // Wenn sie normalisiert (0.0..1.0) sind: * tex_size und dann *scale
-                                        // Wir nehmen an: sie sind in Pixeln
-
-                                        let top_left = egui::pos2(
-                                            rect.left() + x * scale,
-                                            rect.top() + y * scale,
-                                        );
-                                        let bottom_right = egui::pos2(
-                                            rect.left() + w * scale,
-                                            rect.top() + h * scale,
-                                        );
-
-                                        let bounding_rect =
-                                            egui::Rect::from_min_max(top_left, bottom_right);
-
-                                        // Farbe pro class_id (einfach ein paar Beispiele)
-
-                                        let color = Color32::RED;
-                                        // Rechteck zeichnen
-                                        ui.painter().rect_stroke(
-                                            bounding_rect,
-                                            0.0,
-                                            egui::Stroke::new(2.0, color),
-                                            StrokeKind::Middle,
-                                        );
-
-                                        // Label-Text (oben links)
-                                        let label_text = format!(
-                                            "{} ({:.0}%)",
-                                            building.class_name,
-                                            building.confidence * 100.0
-                                        );
-
-                                        ui.painter().text(
-                                            top_left,
-                                            egui::Align2::LEFT_TOP,
-                                            label_text,
-                                            egui::TextStyle::Body.resolve(ui.style()),
-                                            color,
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                    });
+                    self.model(ui, ctx);
                 }
-
                 Tab::YoloLabel => {
-                    if let Some(selected) = &self.selected_image {
-                        // Bild laden & in Texture umwandeln
-                        if self.image_texture.is_none() {
-                            if let Ok(img) = image::open(selected) {
-                                let img = img.to_rgba8();
-                                let size = [img.width() as usize, img.height() as usize];
-                                let color_img =
-                                    egui::ColorImage::from_rgba_unmultiplied(size, &img.into_raw());
-                                self.image_texture = Some(ctx.load_texture(
-                                    "selected_image",
-                                    color_img,
-                                    Default::default(),
-                                ));
-                            }
-                        }
-
-                        if let Some(texture) = &self.image_texture {
-                            // Verfügbare Größe des Panels
-                            let available_size = ui.available_size();
-                            let tex_size =
-                                egui::vec2(texture.size()[0] as f32, texture.size()[1] as f32);
-
-                            // Bildgröße proportional anpassen (Seitenverhältnis behalten)
-                            let scale =
-                                (available_size.x / tex_size.x).min(available_size.y / tex_size.y);
-                            let final_size = tex_size * scale;
-
-                            // Bild anzeigen
-                            let img = egui::Image::new(texture).fit_to_exact_size(final_size);
-                            let response = ui.add(img);
-
-                            // Das gezeichnete Rechteck
-                            let rect = response.rect;
-
-                            // Cursor-Position innerhalb des Bildes ermitteln
-                            let cursor_pos = ui.ctx().input(|i| i.pointer.hover_pos());
-                            let cursor_over_image =
-                                cursor_pos.map_or(false, |pos| rect.contains(pos));
-
-                            let pointer_pos = ui.input(|i| i.pointer.hover_pos());
-
-                            if cursor_over_image {
-                                let pointer_down = ui.input(|i| i.pointer.primary_down());
-                                let pointer_clicked = ui.input(|i| i.pointer.primary_clicked());
-                                let pointer_released = ui.input(|i| i.pointer.primary_released());
-
-                                if pointer_clicked {
-                                    dbg!("clicked");
-                                    self.current_rect_start = pointer_pos;
-                                    self.current_rect_end = self.current_rect_start;
-                                }
-                                // Ziehen
-                                if pointer_down {
-                                    dbg!(pointer_pos);
-                                    if self.current_rect_start.is_none() {
-                                        self.current_rect_start = pointer_pos;
-                                    }
-                                    self.current_rect_end = pointer_pos;
-                                }
-                                // Loslassen
-                                if pointer_released {
-                                    dbg!(self.current_rect_start, self.current_rect_end);
-                                    if let (Some(start), Some(end)) =
-                                        (self.current_rect_start, self.current_rect_end)
-                                    {
-                                        let rect = egui::Rect::from_two_pos(start, end).expand(2.0);
-                                        self.labeled_rects.push(LabeledRect {
-                                            rect,
-                                            label: String::new(),
-                                        });
-
-                                        self.current_rect_end = None;
-                                        self.current_rect_start = None;
-                                    }
-                                }
-                            }
-
-                            if self.current_rect_start.is_none() {
-                                if let Some(r) = self.labeled_rects.last_mut() {
-                                    // Lade bekannte Klassen aus data.yaml
-                                    let yaml_path = std::path::Path::new("dataset/data.yaml");
-                                    let yaml_content =
-                                        std::fs::read_to_string(yaml_path).unwrap_or_default();
-
-                                    #[derive(Deserialize)]
-                                    struct DataYaml {
-                                        names: std::collections::HashMap<usize, String>,
-                                    }
-
-                                    let class_names: Vec<String> = if let Ok(data) =
-                                        serde_yaml::from_str::<DataYaml>(&yaml_content)
-                                    {
-                                        data.names.values().cloned().collect()
-                                    } else {
-                                        vec![]
-                                    };
-
-                                    for event in &ctx.input(|i| i.events.clone()) {
-                                        match event {
-                                            egui::Event::Text(text) => {
-                                                r.label.push_str(text);
-                                            }
-                                            egui::Event::Key {
-                                                key, pressed: true, ..
-                                            } => match key {
-                                                egui::Key::Backspace => {
-                                                    r.label.pop();
-                                                }
-                                                egui::Key::Tab => {
-                                                    let trimmed = r.label.trim();
-                                                    let matches: Vec<&String> = class_names
-                                                        .iter()
-                                                        .filter(|name| name.starts_with(trimmed))
-                                                        .collect();
-
-                                                    if matches.len() == 1 {
-                                                        r.label = matches[0].clone();
-                                                    }
-                                                }
-                                                _ => {}
-                                            },
-                                            _ => {}
-                                        }
-                                    }
-                                }
-                            }
-
-                            if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-                                if let Some(image_path) = &self.selected_image {
-                                    println!("📦 Speichere YOLO-Labels...");
-
-                                    use std::collections::HashMap;
-                                    use std::fs;
-                                    use std::io::Write;
-                                    use std::path::Path;
-
-                                    #[derive(Debug, Deserialize, Serialize)]
-                                    struct DataYaml {
-                                        train: String,
-                                        val: String,
-                                        names: HashMap<usize, String>,
-                                    }
-
-                                    let yaml_path = Path::new("dataset/data.yaml");
-                                    let yaml_content = fs::read_to_string(yaml_path)
-                                        .expect("❌ Kann data.yaml nicht lesen");
-                                    let mut data: DataYaml = serde_yaml::from_str(&yaml_content)
-                                        .expect("❌ Kann data.yaml nicht parsen");
-
-                                    // Umgekehrtes Mapping: Label → ID
-                                    let mut class_map: HashMap<String, usize> =
-                                        data.names.iter().map(|(k, v)| (v.clone(), *k)).collect();
-
-                                    let w = final_size.x;
-                                    let h = final_size.y;
-
-                                    // Zielordner zufällig: train oder val
-                                    let mut rng = rand::thread_rng();
-                                    let is_train = rng.gen_bool(0.8); // 80% train
-                                    let (img_target, label_target) = if is_train {
-                                        (
-                                            Path::new("dataset/images/train"),
-                                            Path::new("dataset/labels/train"),
-                                        )
-                                    } else {
-                                        (
-                                            Path::new("dataset/images/val"),
-                                            Path::new("dataset/labels/val"),
-                                        )
-                                    };
-
-                                    // Datei kopieren
-                                    let filename = Path::new(image_path)
-                                        .file_name()
-                                        .unwrap()
-                                        .to_str()
-                                        .unwrap();
-
-                                    let target_img_path = img_target.join(filename);
-                                    fs::create_dir_all(img_target).unwrap();
-                                    fs::copy(image_path, &target_img_path)
-                                        .expect("❌ Bild konnte nicht kopiert werden");
-
-                                    // Label-Datei schreiben
-                                    let label_path =
-                                        label_target.join(filename.replace(".png", ".txt"));
-                                    fs::create_dir_all(label_target).unwrap();
-
-                                    let mut label_file = fs::File::create(&label_path)
-                                        .expect("❌ Konnte .txt nicht schreiben");
-
-                                    let mut yaml_updated = false;
-
-                                    for lr in &self.labeled_rects {
-                                        let label = lr.label.trim().to_string();
-
-                                        // Wenn Klasse nicht existiert, hinzufügen
-                                        let class_id = if let Some(id) = class_map.get(&label) {
-                                            *id
-                                        } else {
-                                            let new_id = data.names.len();
-                                            data.names.insert(new_id, label.clone());
-                                            class_map.insert(label.clone(), new_id);
-                                            yaml_updated = true;
-                                            new_id
-                                        };
-
-                                        let x = (lr.rect.min.x + lr.rect.max.x) / 2.0 / w as f32;
-                                        let y = (lr.rect.min.y + lr.rect.max.y) / 2.0 / h as f32;
-                                        let bw = (lr.rect.max.x - lr.rect.min.x) / w as f32;
-                                        let bh = (lr.rect.max.y - lr.rect.min.y) / h as f32;
-
-                                        writeln!(
-                                            label_file,
-                                            "{} {:.6} {:.6} {:.6} {:.6}",
-                                            class_id, x, y, bw, bh
-                                        )
-                                        .expect("❌ Schreiben fehlgeschlagen");
-                                    }
-
-                                    // YAML zurückschreiben, wenn geändert
-                                    if yaml_updated {
-                                        let new_yaml = serde_yaml::to_string(&data)
-                                            .expect("❌ Fehler beim YAML-Serialisieren");
-                                        fs::write(yaml_path, new_yaml)
-                                            .expect("❌ Fehler beim Schreiben von data.yaml");
-                                        println!("📄 Neue Labels wurden zu data.yaml hinzugefügt.");
-                                    }
-
-                                    println!("✅ YOLO-Label gespeichert: {}", label_path.display());
-                                    self.labeled_rects.clear(); // fertig gelabelt
-                                    self.active_tab = Tab::Settings;
-                                }
-                            }
-
-                            // Rechtecke zeichnen
-                            let painter = ui.painter();
-                            dbg!(self.labeled_rects.len());
-                            for lr in &self.labeled_rects {
-                                painter.rect_stroke(
-                                    lr.rect,
-                                    0.0,
-                                    (2.0, egui::Color32::RED),
-                                    StrokeKind::Middle,
-                                );
-                                painter.text(
-                                    lr.rect.left_top(),
-                                    egui::Align2::LEFT_TOP,
-                                    &lr.label,
-                                    egui::TextStyle::Body.resolve(&ctx.style()),
-                                    egui::Color32::YELLOW,
-                                );
-                            }
-
-                            if let (Some(start), Some(current)) =
-                                (self.current_rect_start, self.current_rect_end)
-                            {
-                                let rect = egui::Rect::from_two_pos(start, current);
-                                painter.rect_stroke(
-                                    rect,
-                                    0.0,
-                                    (1.0, egui::Color32::GREEN),
-                                    StrokeKind::Middle,
-                                );
-                            }
-                        }
-                    } else {
-                        ui.label("Kein Bild ausgewählt.");
-                    }
+                    self.yolo_label(ui, ctx);
                 }
             }
         });
