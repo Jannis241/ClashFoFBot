@@ -10,6 +10,6 @@ mod threading;
 mod ui;
 
 fn main() {
-    // ui::start_ui();
-    debug::run_tests();
+    ui::start_ui();
+    // debug::run_tests();
 }

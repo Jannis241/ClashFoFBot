@@ -193,8 +193,10 @@ impl eframe::App for ScreenshotApp {
 
                             ui.label(format!("📁 Speicher Ordner: {}", self.screenshot_path));
                         });
+                        println!("ad");
 
                         let state = DeviceState::new();
+                        dbg!(state.query_keymap());
                         if state
                             .query_keymap()
                             .contains(&keycode_from_str(&self.keybind).unwrap_or(Keycode::V))
@@ -387,10 +389,10 @@ impl eframe::App for ScreenshotApp {
                                     for building in buildings {
                                         let (x, y, w, h) = building.bounding_box;
 
-                                        let x = x * tex_size.x;
-                                        let y = y * tex_size.y;
-                                        let w = w * tex_size.x;
-                                        let h = h * tex_size.y;
+                                        // let x = x * tex_size.x;
+                                        // let y = y * tex_size.y;
+                                        // let w = w * tex_size.x;
+                                        // let h = h * tex_size.y;
 
                                         // Bounding-Box-Koordinaten relativ zum Bild (normalisiert oder nicht?)
                                         // Wenn Koordinaten in Pixeln: einfach *scale
@@ -402,20 +404,16 @@ impl eframe::App for ScreenshotApp {
                                             rect.top() + y * scale,
                                         );
                                         let bottom_right = egui::pos2(
-                                            rect.left() + (x + w) * scale,
-                                            rect.top() + (y + h) * scale,
+                                            rect.left() + w * scale,
+                                            rect.top() + h * scale,
                                         );
+
                                         let bounding_rect =
                                             egui::Rect::from_min_max(top_left, bottom_right);
 
                                         // Farbe pro class_id (einfach ein paar Beispiele)
-                                        let color = match building.class_id {
-                                            0 => Color32::LIGHT_BLUE,
-                                            1 => Color32::LIGHT_RED,
-                                            2 => Color32::LIGHT_GREEN,
-                                            _ => Color32::WHITE,
-                                        };
 
+                                        let color = Color32::RED;
                                         // Rechteck zeichnen
                                         ui.painter().rect_stroke(
                                             bounding_rect,
