@@ -3,8 +3,20 @@ use crate::prelude::*;
 /// Automatischer Feldzugriff – wird intern verwendet
 pub trait AutoThread: Send + 'static {
     fn run(&mut self); // Benutzerdefiniert
-    fn set_field(&mut self, key: &str, value: &str);
-    fn get_output(&self, key: &str) -> Option<String>;
+    fn set_field_any(&mut self, field: &str, value: Box<dyn std::any::Any>) -> bool;
+    fn get_field_any(&self, field: &str) -> Option<&dyn std::any::Any>;
+}
+
+#[macro_export]
+macro_rules! auto_set_field {
+    ($field_name:literal, |$arg:ident : $ty:ty| $body:expr) => {{
+        if field == $field_name {
+            if let Ok($arg) = value.downcast::<$ty>() {
+                $body;
+                return true;
+            }
+        }
+    }};
 }
 
 /// Thread-Wrapper
@@ -34,14 +46,19 @@ impl<T: AutoThread> WorkerHandle<T> {
         }
     }
 
-    pub fn send(&self, key: &str, value: &str) {
-        if let Ok(mut obj) = self.state.lock() {
-            obj.set_field(key, value);
+    pub fn set_field<U: 'static>(&self, key: &str, value: U) {
+        if let Ok(mut state) = self.state.lock() {
+            let _ = state.set_field_any(key, Box::new(value));
         }
     }
 
-    pub fn get_output(&self, key: &str) -> Option<String> {
-        self.state.lock().ok().and_then(|obj| obj.get_output(key))
+    pub fn get_output<U: 'static>(&self, key: &str) -> Option<U>
+    where
+        U: Clone,
+    {
+        let data = self.state.lock().ok()?;
+        let any = data.get_field_any(key)?;
+        any.downcast_ref::<U>().cloned()
     }
 
     pub fn update<F, R>(&self, f: F) -> R

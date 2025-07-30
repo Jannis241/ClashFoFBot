@@ -35,6 +35,44 @@ enum Tab {
     Model,
 }
 
+struct TrainThread {
+    model_name: String,
+}
+
+impl threading::AutoThread for TrainThread {
+    fn run(&mut self) {
+        image_data_wrapper::train_model(1);
+    }
+    fn set_field_any(&mut self, field: &str, value: Box<dyn std::any::Any>) -> bool {
+        panic!("shouldnt set any fields")
+    }
+    fn get_field_any(&self, field: &str) -> Option<&dyn std::any::Any> {
+        panic!("shouldnt get any outputs")
+    }
+}
+
+struct GetBuildingsThread {
+    path_to_image: String,
+    buildings: Vec<image_data_wrapper::Building>,
+}
+
+impl threading::AutoThread for GetBuildingsThread {
+    fn run(&mut self) {
+        self.buildings = image_data_wrapper::get_buildings(&Path::new(&self.path_to_image));
+    }
+    fn set_field_any(&mut self, field: &str, value: Box<dyn std::any::Any>) -> bool {
+        auto_set_field!("path_to_image", |val: String| self.path_to_image = val);
+
+        false
+    }
+    fn get_field_any(&self, field: &str) -> Option<&dyn std::any::Any> {
+        match field {
+            "buildings" => Some(&self.buildings),
+            other => panic!("is not able to get '{other}'"),
+        }
+    }
+}
+
 pub struct ScreenshotApp {
     pub screenshot_path: String,
     pub keybind: String,
@@ -44,7 +82,9 @@ pub struct ScreenshotApp {
     pub epoche: String,
     pub current_buildings: Option<Vec<image_data_wrapper::Building>>,
 
-    current_train_thread: Option<std::thread::JoinHandle<()>>,
+    train_threads: Vec<TrainThread>,
+    get_building_thread: GetBuildingsThread,
+
     active_tab: Tab,
     image_texture: Option<egui::TextureHandle>,
     labeled_rects: Vec<LabeledRect>,
@@ -69,7 +109,13 @@ impl Default for ScreenshotApp {
             ),
             epoche: "".to_string(),
             current_buildings: None,
-            current_train_thread: None,
+
+            train_threads: vec![],
+            get_building_thread: GetBuildingsThread {
+                path_to_image: "".to_string(),
+                buildings: vec![],
+            },
+
             available_images: vec![],
             active_tab: Tab::Settings,
             image_texture: None,
@@ -115,10 +161,8 @@ impl ScreenshotApp {
             }
         }
     }
-}
 
-impl eframe::App for ScreenshotApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn set_style(ctx: &egui::Context) {
         let mut style: egui::Style = (*ctx.style()).clone();
         let size = 2.;
         style.text_styles = [
@@ -146,116 +190,149 @@ impl eframe::App for ScreenshotApp {
         .into();
 
         ctx.set_style(style);
+    }
 
+    fn tabs(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if ui
+                .selectable_label(self.active_tab == Tab::Settings, "⚙️ Einstellungen")
+                .clicked()
+            {
+                self.active_tab = Tab::Settings;
+            }
+            if ui
+                .selectable_label(self.active_tab == Tab::YoloLabel, "🖼️ YOLO-Label")
+                .clicked()
+            {
+                self.active_tab = Tab::YoloLabel;
+            }
+            if ui
+                .selectable_label(self.active_tab == Tab::Model, "|| Model")
+                .clicked()
+            {
+                self.active_tab = Tab::Model;
+            }
+        });
+    }
+
+    fn keybinds(&mut self, ui: &mut egui::Ui) {
+        ui.collapsing("Keybinds", |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Screenshot-Key:");
+                ui.text_edit_singleline(&mut self.keybind);
+            });
+
+            ui.horizontal(|ui| {
+                if ui.button("📂 Speicher Ordner wählen").clicked() {
+                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                        self.screenshot_path =
+                            String::from_utf8(path.clone().as_os_str().as_bytes().to_vec())
+                                .unwrap();
+                    }
+                }
+
+                ui.label(format!("📁 Speicher Ordner: {}", self.screenshot_path));
+            });
+
+            let state = DeviceState::new();
+            if state
+                .query_keymap()
+                .contains(&keycode_from_str(&self.keybind).unwrap_or(Keycode::V))
+            {
+                self.take_labeled_screenshot();
+                self.update_image_list();
+            }
+        });
+        ui.collapsing("Png Wählen (zum labeln und zum testen))", |ui| {
+            self.ordner_wählen(ui);
+            self.update_image_list();
+            self.show_available_pngs(ui);
+        });
+    }
+
+    fn take_labeled_screenshot(&mut self) {
+        let now = Local::now();
+        let filename = format!("{}.png", now.format("%Y-%m-%d_%H-%M-%S"));
+
+        let save_path = Path::new(&self.screenshot_path).join(filename);
+        if let Err(e) = std::fs::create_dir_all(&self.screenshot_path) {
+            eprintln!("Fehler beim Erstellen des Ordners: {e}");
+        }
+        let screen = screener::make_screenshot(0);
+        screen.save(&save_path).expect("error while saving img");
+        println!("📸 Screenshot gespeichert unter: {}", save_path.display());
+    }
+
+    fn ordner_wählen(&mut self, ui: &mut egui::Ui) {
+        if ui.button("📂 Ordner wählen").clicked() {
+            if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                self.image_folder = Some(path.clone());
+                self.image_texture = None;
+            }
+        }
+
+        if let Some(folder) = &self.image_folder {
+            ui.label(format!("📁 Ordner: {}", folder.display()));
+        }
+    }
+
+    fn show_available_pngs(&mut self, ui: &mut egui::Ui) {
+        egui::ComboBox::from_label("Bild auswählen")
+            .selected_text(
+                self.selected_image
+                    .as_ref()
+                    .map(|s| {
+                        Path::new(s)
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                    })
+                    .unwrap_or_else(|| "Kein Bild ausgewählt".into()),
+            )
+            .show_ui(ui, |ui| {
+                for img in &self.available_images {
+                    let filename = Path::new(img)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy();
+
+                    let in_dataset = self.is_image_in_dataset(&filename);
+                    let is_selected = self.selected_image.as_deref() == Some(img);
+
+                    // Farbe festlegen
+                    let color = if is_selected {
+                        egui::Color32::from_rgb(100, 150, 255) // blau
+                    } else if in_dataset {
+                        egui::Color32::from_rgb(0, 200, 100) // grün
+                    } else {
+                        egui::Color32::from_rgb(200, 50, 50) // rot
+                    };
+
+                    let label = RichText::new(filename.clone()).color(color);
+
+                    if ui.selectable_label(is_selected, label).clicked() {
+                        self.selected_image = Some(img.clone());
+                        self.image_texture = None;
+                        ui.close_menu(); // schließt das Dropdown nach Auswahl
+                    }
+                }
+            });
+    }
+}
+
+impl eframe::App for ScreenshotApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        ScreenshotApp::set_style(ctx);
         ctx.request_repaint();
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                if ui
-                    .selectable_label(self.active_tab == Tab::Settings, "⚙️ Einstellungen")
-                    .clicked()
-                {
-                    self.active_tab = Tab::Settings;
-                }
-                if ui
-                    .selectable_label(self.active_tab == Tab::YoloLabel, "🖼️ YOLO-Label")
-                    .clicked()
-                {
-                    self.active_tab = Tab::YoloLabel;
-                }
-                if ui
-                    .selectable_label(self.active_tab == Tab::Model, "|| Model")
-                    .clicked()
-                {
-                    self.active_tab = Tab::Model;
-                }
-            });
+            self.tabs(ui);
 
             ui.separator();
 
             match self.active_tab {
                 Tab::Settings => {
-                    ui.collapsing("📸 Keybinds", |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label("Screenshot-Key:");
-                            ui.text_edit_singleline(&mut self.keybind);
-                        });
-
-                        ui.horizontal(|ui| {
-                            if ui.button("📂 Speicher Ordner wählen").clicked() {
-                                if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                                    self.screenshot_path = String::from_utf8(
-                                        path.clone().as_os_str().as_bytes().to_vec(),
-                                    )
-                                    .unwrap();
-                                }
-                            }
-
-                            ui.label(format!("📁 Speicher Ordner: {}", self.screenshot_path));
-                        });
-                        println!("ad");
-
-                        let state = DeviceState::new();
-                        dbg!(state.query_keymap());
-                        if state
-                            .query_keymap()
-                            .contains(&keycode_from_str(&self.keybind).unwrap_or(Keycode::V))
-                        {
-                            println!("took screenshot");
-                            let now = Local::now();
-                            let filename = format!("{}.png", now.format("%Y-%m-%d_%H-%M-%S"));
-
-                            let save_path = Path::new(&self.screenshot_path).join(filename);
-                            if let Err(e) = std::fs::create_dir_all(&self.screenshot_path) {
-                                eprintln!("Fehler beim Erstellen des Ordners: {e}");
-                            }
-                            let screen = screener::make_screenshot(0);
-                            screen.save(&save_path).expect("error while saving img");
-                            println!("📸 Screenshot gespeichert unter: {}", save_path.display());
-
-                            self.update_image_list(); // 👈 Bildliste neu laden
-                        }
-                    });
-                    ui.collapsing("🖼️ Labeln", |ui| {
-                        if ui.button("📂 Ordner wählen").clicked() {
-                            if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                                self.image_folder = Some(path.clone());
-                                self.image_texture = None;
-                            }
-                        }
-
-                        if let Some(folder) = &self.image_folder {
-                            ui.label(format!("📁 Ordner: {}", folder.display()));
-                        }
-
-                        self.update_image_list();
-
-                        for img in &self.available_images {
-                            let filename = Path::new(img)
-                                .file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy();
-
-                            let in_dataset = self.is_image_in_dataset(&filename);
-                            let is_selected = self.selected_image.as_deref() == Some(img);
-
-                            // Farbe festlegen
-                            let color = if is_selected {
-                                egui::Color32::from_rgb(100, 150, 255) // blau
-                            } else if in_dataset {
-                                egui::Color32::from_rgb(0, 200, 100) // grün
-                            } else {
-                                egui::Color32::from_rgb(200, 50, 50) // rot
-                            };
-
-                            let label = egui::RichText::new(filename).color(color);
-
-                            if ui.selectable_label(is_selected, label).clicked() {
-                                self.selected_image = Some(img.clone());
-                                self.image_texture = None;
-                            }
-                        }
-                    });
+                    self.keybinds(ui);
                 }
                 Tab::Model => {
                     ui.collapsing("Training", |ui: &mut egui::Ui| {
@@ -331,6 +408,7 @@ impl eframe::App for ScreenshotApp {
                             }
                         }
                     });
+                    ui.collapsing("Training", |ui: &mut egui::Ui| {});
                     ui.collapsing("Model testen -Visual", |ui: &mut egui::Ui| {
                         if let Some(selected) = &self.selected_image {
                             // Bild laden & in Texture umwandeln
