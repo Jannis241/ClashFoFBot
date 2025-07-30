@@ -367,11 +367,13 @@ impl eframe::App for ScreenshotApp {
                                 // Bounding Boxes zeichnen
                                 if let Some(image_path) = &self.selected_image {
                                     if self.current_buildings.is_none() {
-                                        self.current_buildings =
-                                            Some(image_data_wrapper::get_buildings(
+                                        self.current_buildings = Some(
+                                            image_data_wrapper::get_buildings(
                                                 String::new(),
                                                 Path::new(image_path),
-                                            ));
+                                            )
+                                            .0,
+                                        )
                                     }
 
                                     let mut buildings = self.current_buildings.clone().unwrap();

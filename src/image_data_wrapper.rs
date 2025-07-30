@@ -1,3 +1,5 @@
+use std::vec;
+
 use crate::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -6,6 +8,10 @@ pub struct Building {
     pub class_name: String,
     pub confidence: f32,
     pub bounding_box: (f32, f32, f32, f32),
+}
+
+pub enum YoloModel {
+    yolov8n,
 }
 
 pub fn get_avg_confidence(buildings: &Vec<Building>) -> f32 {
@@ -17,13 +23,27 @@ pub fn get_avg_confidence(buildings: &Vec<Building>) -> f32 {
     return sum / buildings.len() as f32;
 }
 
-pub fn create_model(model_name: String, yolo_model: String) {
+pub fn create_model(model_name: String, yolo_model: YoloModel) -> bool {
     println!("Creating model");
+    if fs::exists(format!("runs/detect/{}", model_name)).unwrap() {
+        eprintln!(
+            "Es existiert bereits ein model mit dem namen {}",
+            model_name
+        );
+        return false;
+    }
+    let yolo_model_string = match yolo_model {
+        YoloModel::yolov8n => String::from("yolov8n.pt"),
+        _ => {
+            eprintln!("Error while parsing yolo model in image data wrapper.rs");
+            return false;
+        }
+    };
     match Command::new("python3")
         .arg("src/image_data.py")
         .arg("--create-model")
         .arg("--base")
-        .arg(yolo_model.to_string())
+        .arg(yolo_model_string.to_string())
         .arg("--model-name")
         .arg(model_name.to_string())
         .output()
@@ -31,18 +51,21 @@ pub fn create_model(model_name: String, yolo_model: String) {
         Ok(output) if output.status.success() => {
             println!("{}", String::from_utf8_lossy(&output.stdout));
             println!("image_data.py finished executing..");
+            return true;
         }
         Ok(output) => {
             eprintln!("Python error:");
             eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            return false;
         }
         Err(e) => {
             eprintln!("Failed to start process: {}", e);
+            return false;
         }
     }
 }
 
-pub fn delete_model(model_name: String) {
+pub fn delete_model(model_name: String) -> bool {
     println!("deleting model '{}'..", model_name);
     let path = format!("runs/detect/{}", model_name);
 
@@ -50,12 +73,19 @@ pub fn delete_model(model_name: String) {
         println!("Found Model! Deleting it now..");
         fs::remove_dir_all(&path);
         println!("Successfully deleted {}", path);
+        return true;
     } else {
         eprintln!("Error: Did not found {}", &path);
+        println!("Failed!");
+        return false;
     }
 }
 
-pub fn train_model(model_name: String, epochen: i32) {
+pub fn train_model(model_name: String, epochen: i32) -> bool {
+    if !fs::exists(format!("runs/detect/{}", model_name)).unwrap() {
+        eprintln!("Es existiert kein model mit dem namen {}", model_name);
+        return false;
+    }
     println!("Training model..");
     match Command::new("python3")
         .arg("src/image_data.py")
@@ -69,18 +99,21 @@ pub fn train_model(model_name: String, epochen: i32) {
         Ok(output) if output.status.success() => {
             println!("{}", String::from_utf8_lossy(&output.stdout));
             println!("image_data.py finished executing..");
+            return true;
         }
         Ok(output) => {
             eprintln!("Python error:");
             eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            return false;
         }
         Err(e) => {
             eprintln!("Failed to start process: {}", e);
+            return false;
         }
     }
 }
 
-pub fn get_buildings(model_name: String, screeenshot_path: &Path) -> Vec<Building> {
+pub fn get_buildings(model_name: String, screeenshot_path: &Path) -> (Vec<Building>, bool) {
     println!("Bekomme Prediction von {}", model_name);
     if fs::exists("Communication").unwrap() {
         fs::remove_dir_all("Communication");
@@ -94,10 +127,13 @@ pub fn get_buildings(model_name: String, screeenshot_path: &Path) -> Vec<Buildin
 
     match res {
         Ok(_) => println!("Datei wurde erfolgreich kopiert!"),
-        Err(e) => eprintln!(
-            "Error: {}  | Tried to copy {:?} to {:?}.",
-            e, screeenshot_path, target
-        ),
+        Err(e) => {
+            eprintln!(
+                "Error: {}  | Tried to copy {:?} to {:?}.",
+                e, screeenshot_path, target
+            );
+            return (vec![], false);
+        }
     }
 
     match Command::new("python3")
@@ -114,12 +150,18 @@ pub fn get_buildings(model_name: String, screeenshot_path: &Path) -> Vec<Buildin
         Ok(output) => {
             eprintln!("Python error:");
             eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            return (vec![], false);
         }
         Err(e) => {
             eprintln!("Failed to start process: {}", e);
+            return (vec![], false);
         }
     }
 
+    if !fs::exists("Communication/data.json").unwrap() {
+        eprintln!("data.json nicht gefunden.");
+        return (vec![], false);
+    }
     let file = File::open("Communication/data.json").expect("Konnte data.json nicht öffnen");
     println!("Reading data.json..");
 
@@ -136,5 +178,5 @@ pub fn get_buildings(model_name: String, screeenshot_path: &Path) -> Vec<Buildin
     fs::remove_dir_all("Communication").expect("failed to remove Communication dir");
     println!("Removed temp Communication directory.");
 
-    return buildings;
+    return (buildings, true);
 }
