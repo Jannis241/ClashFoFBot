@@ -1,6 +1,8 @@
+use strum_macros::AsRefStr;
+
 use crate::prelude::*;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, AsRefStr)]
 pub enum DatasetType {
     Buildings,
     Level,
@@ -12,6 +14,27 @@ pub struct Building {
     pub class_name: String,
     pub confidence: f32,
     pub bounding_box: (f32, f32, f32, f32),
+}
+
+pub struct Model {
+    pub name: String,
+    pub rating: f64,
+    pub dataset_type: DatasetType,
+}
+
+#[derive(Deserialize)]
+struct ArgsYaml {
+    data: Option<String>,
+}
+
+impl Model {
+    pub fn new(name: String, rating: f64, dataset_type: DatasetType) -> Self {
+        Model {
+            name,
+            rating,
+            dataset_type,
+        }
+    }
 }
 
 // funktioniert nicht weil man das immer erst von git runter laden muss und dann in den path packen
@@ -77,7 +100,7 @@ fn read_last_metrics(model_name: &str) -> Option<Metrics> {
     last
 }
 
-pub fn get_rating(model_name: &str) -> Result<f64, FofError> {
+fn get_rating(model_name: &str) -> Result<f64, FofError> {
     println!("Searching for metrics of the '{}' model.", model_name);
     if let Some(m) = read_last_metrics(model_name) {
         println!("Success: Found Metrics for the '{}' model.", model_name);
@@ -88,10 +111,33 @@ pub fn get_rating(model_name: &str) -> Result<f64, FofError> {
     }
 }
 
-pub fn get_model_names() -> Result<Vec<String>, FofError> {
-    println!("Searching for all model names..");
+pub fn get_dataset_type(name: &str) -> Result<DatasetType, FofError> {
+    let path = format!("runs/detect/{}/args.yaml", name);
+    let file = File::open(&path).map_err(|_| FofError::FailedReadingFile(path.clone()))?;
 
-    let mut model_names = Vec::new();
+    let args: ArgsYaml =
+        serde_yaml::from_reader(file).map_err(|e| FofError::YamlParseError(e.to_string()))?;
+
+    let data_field = args
+        .data
+        .ok_or_else(|| FofError::MissingField(format!("'data' field missing in {}", path)))?;
+
+    if data_field.starts_with("dataset_buildings/") {
+        println!("Found dataset_buildings for {}", name);
+        Ok(DatasetType::Buildings)
+    } else if data_field.starts_with("dataset_level/") {
+        println!("Found dataset_level for {}", name);
+        Ok(DatasetType::Level)
+    } else {
+        eprintln!("Error: wasnt able to figure data set for {} out.", name);
+        Err(FofError::UnsupportedDataset(data_field))
+    }
+}
+
+pub fn get_all_models() -> Result<Vec<Model>, FofError> {
+    println!("Searching for all models.");
+
+    let mut models = Vec::new();
     let path = Path::new("runs/detect");
 
     let entries = match fs::read_dir(path) {
@@ -124,7 +170,17 @@ pub fn get_model_names() -> Result<Vec<String>, FofError> {
                     match entry.file_name().to_str() {
                         Some(name) => {
                             println!("📁 Found model directory: {}", name);
-                            model_names.push(name.to_string());
+                            let rating = match get_rating(name) {
+                                Ok(r) => r,
+                                Err(fof_error) => return Err(fof_error),
+                            };
+                            let dataset_type = match get_dataset_type(name) {
+                                Ok(r) => r,
+                                Err(fof_error) => return Err(fof_error),
+                            };
+
+                            let m = Model::new(name.to_string(), rating, dataset_type);
+                            models.push(m);
                         }
                         None => {
                             eprintln!(
@@ -149,7 +205,7 @@ pub fn get_model_names() -> Result<Vec<String>, FofError> {
         }
     }
 
-    Ok(model_names)
+    Ok(models)
 }
 
 #[derive(Debug, PartialEq, EnumIter, Display, Eq, Clone)]
@@ -249,12 +305,29 @@ pub fn delete_model(model_name: &str) -> Option<FofError> {
     }
 }
 
-pub fn train_model(model_name: &str, dataset_type: DatasetType, epochen: i32) -> Option<FofError> {
+pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
     println!("Training model '{}'", model_name);
-    let t = match dataset_type {
+    let dataset_type = match get_dataset_type(model_name) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!(
+                "Error while trying to figure dataset of '{}' out: {:?}",
+                model_name, e
+            );
+            return Some(e);
+        }
+    };
+
+    let dataset_type = match dataset_type {
         DatasetType::Level => "level",
         DatasetType::Buildings => "buildings",
     };
+
+    println!(
+        "Training: found out dataset for '{}' : {:?}",
+        model_name, dataset_type
+    );
+
     let path = format!("runs/detect/{}", model_name);
 
     if let Ok(false) = fs::exists(&path) {
@@ -275,7 +348,7 @@ pub fn train_model(model_name: &str, dataset_type: DatasetType, epochen: i32) ->
         .arg("--epochs")
         .arg(epochen.to_string())
         .arg("--dataset_type")
-        .arg(t)
+        .arg(dataset_type.to_string())
         .output()
     {
         Ok(output) if output.status.success() => {

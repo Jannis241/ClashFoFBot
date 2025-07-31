@@ -24,9 +24,19 @@ pub enum FofError {
     ModelNotFound(String), // Wenn man versucht ein Modell zu löschen oder zu trainieren welches es nciht gibt. String
     JsonParseError(String),
     FailedDeletingDirectory(String),
+    YamlParseError(String),
+    MissingField(String),
+    UnsupportedDataset(String),
+    IoError(String),
+}
+
+impl From<io::Error> for FofError {
+    fn from(e: io::Error) -> Self {
+        FofError::IoError(e.to_string())
+    }
 }
 
 fn main() {
-    ui::start_ui();
-    // debug::run_tests();
+    // ui::start_ui();
+    debug::run_tests();
 }
