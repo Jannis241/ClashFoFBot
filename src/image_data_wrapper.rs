@@ -172,7 +172,11 @@ pub fn get_avg_confidence(buildings: &[Building]) -> Result<f32, FofError> {
     Ok(sum / buildings.len() as f32)
 }
 
-pub fn create_model(model_name: &str, yolo_model: YoloModel) -> Option<FofError> {
+pub fn create_model(
+    model_name: &str,
+    dataset_type: DatasetType,
+    yolo_model: YoloModel,
+) -> Option<FofError> {
     println!(
         "Creating new model '{}' with the '{:?}' yolo base model.",
         model_name, yolo_model
@@ -182,6 +186,11 @@ pub fn create_model(model_name: &str, yolo_model: YoloModel) -> Option<FofError>
         eprintln!("Error: Model '{}' already exists. Aborting..", model_name);
         return Some(FofError::ModelAlreadyExists);
     }
+
+    let t = match dataset_type {
+        DatasetType::Level => "level",
+        DatasetType::Buildings => "buildings",
+    };
 
     println!("Parsing YOLO base model..");
     let yolo_model_string = match yolo_model {
@@ -200,6 +209,8 @@ pub fn create_model(model_name: &str, yolo_model: YoloModel) -> Option<FofError>
         .arg(yolo_model_string)
         .arg("--model-name")
         .arg(model_name)
+        .arg("--dataset_type")
+        .arg(t)
         .output()
     {
         Ok(output) if output.status.success() => {
@@ -238,8 +249,12 @@ pub fn delete_model(model_name: &str) -> Option<FofError> {
     }
 }
 
-pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
+pub fn train_model(model_name: &str, dataset_type: DatasetType, epochen: i32) -> Option<FofError> {
     println!("Training model '{}'", model_name);
+    let t = match dataset_type {
+        DatasetType::Level => "level",
+        DatasetType::Buildings => "buildings",
+    };
     let path = format!("runs/detect/{}", model_name);
 
     if let Ok(false) = fs::exists(&path) {
@@ -259,6 +274,8 @@ pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
         .arg(model_name)
         .arg("--epochs")
         .arg(epochen.to_string())
+        .arg("--dataset_type")
+        .arg(t)
         .output()
     {
         Ok(output) if output.status.success() => {

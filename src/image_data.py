@@ -29,17 +29,24 @@ def write_data(data):
     print(f"JSON Data erfolgreich in {file_path} geschrieben.")
 
 IMAGE_PATH = "Communication/screenshot.png"
-DATA_YAML = "dataset/data.yaml"
 
-def create_new_model(model_name, yolo_model):
+def create_new_model(model_name, data_set_type, yolo_model):
     model = YOLO(yolo_model)
+    if data_set_type == "buildings":
+        DATA_YAML = "dataset_buildings/data.yaml"
+    else:
+        DATA_YAML = "dataset_level/data.yaml"
     model.train(data=DATA_YAML, epochs=1, name=model_name, augment=True)
     print(f"Erstellung von '{model_name}'abgeschlossen. Das Modell findest du unter 'runs/detect/{model_name}/weights/best.pt'")
 
-def train_model(model_name, epochen):
+def train_model(model_name, data_set_type, epochen):
     model_path = f"runs/detect/{model_name}/weights/best.pt"
 
     model = YOLO(model_path)
+    if data_set_type == "buildings":
+        DATA_YAML = "dataset_buildings/data.yaml"
+    else:
+        DATA_YAML = "dataset_level/data.yaml"
     model.train(data=DATA_YAML, epochs=epochen, name=model_name, exist_ok=True,augment=True)
 
     print("Training erfolgreich abgeschlossen.")
@@ -84,6 +91,7 @@ parser.add_argument('--predict', action='store_true', help='Mache eine Vorhersag
 parser.add_argument('--model-name', type=str, default=None, help='Name des Modells / Verzeichnisses')
 parser.add_argument('--epochs', type=int, default=None, help='Anzahl der Trainings-Epochen')
 parser.add_argument('--base', type=str, default=None, help='YOLO-Modellbasis (z. B. yolov8n.pt, yolov8s.pt)')
+parser.add_argument('--dataset_type', type=str, default=None, help='')
 
 
 args = parser.parse_args()
@@ -96,11 +104,11 @@ if args.zahl_erkennen:
         f.write(text)
 
 if args.create_model:
-    create_new_model(args.model_name, args.base)
+    create_new_model(args.model_name, args.dataset_type, args.base)
 
 
 if args.train:
-    train_model(args.model_name, epochs)
+    train_model(args.model_name, args.dataset_type, epochs)
 
 if args.predict:
     write_prediction_to_json(args.model_name, "Communication/screenshot.png")

@@ -2,4 +2,5 @@ path: dataset_buildings
 train: images/train
 val: images/val
 names:
+  fufu,
 
