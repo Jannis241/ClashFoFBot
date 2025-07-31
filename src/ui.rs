@@ -121,6 +121,7 @@ pub struct ScreenshotApp {
     current_rect_end: Option<egui::Pos2>,
     new_model_name: String,
     dataset_mode: image_data_wrapper::DatasetType,
+    current_models: Vec<image_data_wrapper::Model>,
 }
 
 #[derive(Clone)]
@@ -162,7 +163,8 @@ impl Default for ScreenshotApp {
             current_rect_start: None,
             current_rect_end: None,
             new_model_name: "".to_string(),
-            dataset_mode: image_data_wrapper::DatasetType::Buildings, // Standardwert
+            dataset_mode: None, // Standardwert
+            current_models: vec![],
         }
     }
 }
