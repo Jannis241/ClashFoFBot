@@ -6,7 +6,6 @@ import argparse
 
 def write_data(data):
     file_path = "Communication/data.json"
-    print("Writing data..")
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4)
@@ -16,21 +15,16 @@ IMAGE_PATH = "Communication/screenshot.png"
 DATA_YAML = "dataset/data.yaml"
 
 def create_new_model(model_name, yolo_model):
-    print(f"Creating new model '{model_name}' with model {yolo_model}")
     model = YOLO(yolo_model)
     model.train(data=DATA_YAML, epochs=1, name=model_name)
     print(f"Erstellung von '{model_name}'abgeschlossen. Das Modell findest du unter 'runs/detect/{model_name}/weights/best.pt'")
 
 def train_model(model_name, epochen):
-    print(f"Training model '{model_name}'")
     model_path = f"runs/detect/{model_name}/weights/best.pt"
     if not os.path.exists(model_path):
-        print(f"Modell {model_name} wurde nicht unter {model_path} gefunden. Training wird abgebrochen..")
         print("FAILED!!")
         return
 
-    print("Modell gefunden:", model_path)
-    print(f"Starte training.. ({epochen}Epochen)")
     model = YOLO(model_path)
     model.train(data=DATA_YAML, epochs=epochen, name=model_name, exist_ok=True)
 
@@ -43,12 +37,8 @@ def write_prediction_to_json(model_name, image_path):
     model_path = f"runs/detect/{model_name}/weights/best.pt"
 
     if not os.path.exists(model_path):
-        print(f"Modell {model_name} wurde nicht unter {model_path} gefunden. Stelle sicher, dass das Model '{model_name}' unter {model_path} liegt.")
         print("FAILED!!")
         return
-
-    print(f"Modell für die prediction: {model_name} ({model_path})")
-    print("Predicte: ", image_path)
 
     model = YOLO(model_path)
 
@@ -68,7 +58,6 @@ def write_prediction_to_json(model_name, image_path):
             "confidence": conf,
             "bounding_box": (xyxy[0], xyxy[1], xyxy[2], xyxy[3])
         })
-    print("Output des Modells: ", output)
 
     write_data(output)
 

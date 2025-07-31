@@ -28,11 +28,11 @@ target
 
 
 # temp
-/runs
-/dataset
-/images
-/todo.txt
-/Communication
+# /runs
+# /dataset
+# /images
+# /todo.txt
+# /Communication
 
 
 

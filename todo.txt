@@ -1,0 +1,9 @@
+validation und train dürfen nicht gemixxt werden also augemntated train muss auch wieder in train und anderherum.
+rating der model (stärke) ins ui
+avg confidence text ins ui
+training stoppen button
+data augemntation
+level und gebäude trennen
+zahlen erkennen
+settings zu coc acc linken damit man rathaus und generelle level hat in ui und die settings dann speichern
+

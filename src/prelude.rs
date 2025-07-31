@@ -16,8 +16,9 @@ pub use rand::Rng;
 pub use screenshots::Screen;
 pub use serde::Deserialize;
 pub use serde::Serialize;
-pub use serde_json::Result;
+// pub use serde_json::Result;
 pub use std::error::Error;
+pub use std::fmt::Debug;
 pub use std::fs;
 pub use std::fs::File;
 pub use std::fs::{copy, read_to_string, remove_file, write, OpenOptions};
@@ -26,6 +27,7 @@ pub use std::os::unix::ffi::OsStrExt;
 pub use std::path::Path;
 pub use std::path::PathBuf;
 pub use std::process::Command;
+pub use std::result::Result;
 pub use std::str::FromStr;
 pub use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -33,3 +35,4 @@ pub use std::sync::{
 };
 pub use std::thread::{self, JoinHandle};
 pub use std::time::Duration;
+pub use FofError::*;
