@@ -72,12 +72,16 @@ struct GetBuildingsThread {
     path_to_image: String,
     buildings: Result<Vec<image_data_wrapper::Building>, FofError>,
     model_name: String,
+    should_get_prediction: bool,
 }
 
 impl threading::AutoThread for GetBuildingsThread {
     fn run(&mut self) {
-        self.buildings =
-            image_data_wrapper::get_prediction(&self.model_name.clone(), &self.path_to_image);
+        if self.should_get_prediction {
+            self.buildings =
+                image_data_wrapper::get_prediction(&self.model_name.clone(), &self.path_to_image);
+            self.should_get_prediction = false;
+        }
     }
     fn handle_field_get(&self, field: &str) -> Option<Box<dyn std::any::Any + Send>> {
         auto_get_field!(self, field, {
@@ -89,7 +93,8 @@ impl threading::AutoThread for GetBuildingsThread {
     fn handle_field_set(&mut self, field: &str, value: Box<dyn std::any::Any + Send>) {
         auto_set_field!(self, field, value, {
             "model_name" => model_name: String,
-            "path_to_image"=> path_to_image: String
+            "path_to_image"=> path_to_image: String,
+            "should_get_prediction" => should_get_prediction: bool
         })
     }
 }
@@ -145,6 +150,7 @@ impl Default for ScreenshotApp {
                     path_to_image: "".to_string(),
                     buildings: Err(FofError::ThreadNotInitialized),
                     model_name: "".to_string(),
+                    should_get_prediction: false,
                 },
                 true,
             ),
@@ -175,17 +181,23 @@ impl ScreenshotApp {
     }
 
     fn update_err(&mut self, _ui: &mut egui::Ui, ctx: &egui::Context) {
-        let fade_start = std::time::Duration::from_secs(5);
+        let fade_start = std::time::Duration::from_secs(2);
         let fade_duration = std::time::Duration::from_secs(1);
         let now = std::time::Instant::now();
+
+        let max_msgs = 3;
+
+        while self.messages.len() > max_msgs {
+            self.messages.remove(0);
+        }
 
         let painter = ctx.layer_painter(egui::LayerId::new(
             egui::Order::Foreground,
             egui::Id::new("ui_messages"),
         ));
 
-        let spacing = 10.0;
-        let mut total_width = 0.0;
+        let spacing = 25.0;
+        let mut total_height = 20.0;
 
         // Zeichne von rechts nach links (neueste Meldung rechts)
         for msg in self.messages.iter().rev() {
@@ -221,18 +233,14 @@ impl ScreenshotApp {
             let font_id = egui::FontId::proportional(34.0);
             let max_width = 400.0;
 
+            let dark_col = bg_color.blend(Color32::from_rgba_unmultiplied(50, 50, 50, 177));
+
             // `layout` takes a `LayoutJob` or `&str` and a max width.
-            let galley = painter.layout(
-                text.text().to_string(),
-                font_id,
-                bg_color.blend(Color32::from_rgba_unmultiplied(123, 123, 123, 70)),
-                max_width,
-            );
+            let galley = painter.layout(text.text().to_string(), font_id, dark_col, max_width);
 
             let size = galley.size() + padding * 2.0;
 
-            let pos = ctx.screen_rect().right_bottom()
-                - egui::vec2(total_width + size.x, size.y + spacing);
+            let pos = ctx.screen_rect().right_top() + egui::vec2(-size.x - spacing, total_height);
 
             let rect = egui::Rect::from_min_size(pos, size);
             let rect_expanded = rect.expand2(padding);
@@ -240,16 +248,13 @@ impl ScreenshotApp {
             painter.rect_stroke(
                 rect_expanded,
                 5.0,
-                egui::Stroke::new(
-                    5.,
-                    bg_color.blend(Color32::from_rgba_unmultiplied(123, 123, 123, 70)),
-                ),
+                egui::Stroke::new(5., dark_col),
                 StrokeKind::Middle,
             );
 
             painter.galley(pos + padding, galley, Color32::RED);
 
-            total_width += size.x + spacing;
+            total_height += size.y + spacing;
         }
 
         // Entferne alte Meldungen
@@ -455,6 +460,8 @@ impl ScreenshotApp {
         if resp.response.changed() {
             self.get_building_thread
                 .set_field("path_to_image", self.selected_image.clone().unwrap());
+            self.get_building_thread
+                .set_field("should_get_prediction", true);
             self.create_error("Changed Img", MessageType::Success);
         }
     }
@@ -564,6 +571,10 @@ impl ScreenshotApp {
                 err = true;
             }
 
+            if err {
+                return std::cmp::Ordering::Equal;
+            }
+
             rating_res_a
                 .unwrap()
                 .partial_cmp(&rating_res_b.unwrap())
@@ -603,6 +614,8 @@ impl ScreenshotApp {
                         self.selected_model = Some(model.clone());
                         self.get_building_thread
                             .set_field("model_name", model.to_string());
+                        self.get_building_thread
+                            .set_field("should_get_prediction", true);
                         self.create_error("Model geändert", MessageType::Success);
                     }
                 }
@@ -801,6 +814,10 @@ impl ScreenshotApp {
                         MessageType::Error,
                     );
                     err = true;
+                }
+
+                if err {
+                    return std::cmp::Ordering::Equal;
                 }
 
                 rating_res_a
@@ -1232,6 +1249,7 @@ impl ScreenshotApp {
                 self.create_error("Session beendet", MessageType::Success);
             } else {
                 self.labeling_que = self.selected_images.iter().cloned().collect();
+                self.selected_images.clear();
                 self.create_error("Session gestartet", MessageType::Success);
             }
         }
@@ -1245,9 +1263,37 @@ impl ScreenshotApp {
                 ui.heading("Png(s) Zum Labeln Wählen");
                 ui.separator();
                 self.ordner_wählen(ui, "📂 Speicher Ordner der zu Labelnden Images wählen");
-                self.show_available_pngs(ui);
                 self.update_image_list();
                 self.show_available_pngs_multiple(ui);
+
+                ui.horizontal(|ui: &mut egui::Ui| {
+                    if ui.button("Alle roten hinzufügen").clicked() {
+                        for img in self.available_images.clone().iter() {
+                            let filename = Path::new(img)
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string();
+
+                            let in_dataset = self.is_image_in_dataset(&filename);
+
+                            if !in_dataset {
+                                self.selected_images.insert(img.to_string());
+                            }
+                        }
+                        self.create_error(
+                            "ALle Pngs, die nicht im Dataset, sind zur Labeling Que hinzugefügt",
+                            MessageType::Success,
+                        );
+                    }
+                    if ui.button("Alle entfernen").clicked() {
+                        self.selected_images.clear();
+                        self.create_error(
+                            "ALle Pngs aus der Labeling Que entfernt",
+                            MessageType::Success,
+                        );
+                    }
+                });
             });
         }
 
