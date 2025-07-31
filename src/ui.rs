@@ -1,7 +1,3 @@
-use std::vec;
-
-use eframe::egui::Sense;
-
 use crate::{prelude::*, threading::WorkerHandle};
 
 pub fn start_ui() {
@@ -52,23 +48,63 @@ enum Tab {
     Model,
 }
 
-struct TrainThread {
-    model_name: String,
-    last_msg: Option<FofError>,
+use crate::threading::*;
+use std::any::Any;
+use std::sync::{Arc, Mutex};
+
+#[derive(Clone)]
+enum TrainStatus {
+    Idle,
+    Running,
+    Done(Option<FofError>),
 }
 
-impl threading::AutoThread for TrainThread {
+struct TrainThread {
+    model_name: String,
+    status: Arc<Mutex<TrainStatus>>,
+    request_start: bool,
+}
+
+impl AutoThread for TrainThread {
     fn run(&mut self) {
-        self.last_msg = image_data_wrapper::train_model(&self.model_name.clone(), 1);
+        let mut status = self.status.lock().unwrap();
+
+        if matches!(*status, TrainStatus::Idle | TrainStatus::Done(_)) {
+            let model = self.model_name.clone();
+            let status_ref = self.status.clone();
+
+            *status = TrainStatus::Running;
+            self.request_start = false;
+
+            thread::spawn(move || {
+                let result = image_data_wrapper::train_model(&model, 1);
+                *status_ref.lock().unwrap() = TrainStatus::Done(result);
+            });
+        }
     }
-    fn handle_field_set(&mut self, _field: &str, _value: Box<dyn std::any::Any + Send>) {
-        panic!("shouldnt set any fields in TrainThread")
+
+    fn handle_field_set(&mut self, field: &str, value: Box<dyn Any + Send>) {
+        auto_set_field!(self, field, value, {
+            "start_training" => request_start: bool,
+            "model_name" => model_name: String
+        });
     }
-    fn handle_field_get(&self, field: &str) -> Option<Box<dyn std::any::Any + Send>> {
+
+    fn handle_field_get(&self, field: &str) -> Option<Box<dyn Any + Send>> {
         auto_get_field!(self, field, {
             "model_name" => model_name: String,
-            "last_msg" => last_msg: Option<FofError>
+            "status" => status: Arc<Mutex<TrainStatus>>
         })
+    }
+}
+
+impl TrainThread {
+    fn new(model_name: String) -> Self {
+        Self {
+            model_name,
+            status: Arc::new(Mutex::new(TrainStatus::Idle)),
+            request_start: true, // direkt starten!
+        }
     }
 }
 
@@ -109,8 +145,6 @@ pub struct ScreenshotApp {
     selected_image: Option<String>,
     image_folder: Option<PathBuf>,
     available_images: Vec<String>,
-    epoche: String,
-    current_buildings: Option<Vec<image_data_wrapper::Building>>,
     selected_model: Option<String>,
     selected_yolo_model: Option<image_data_wrapper::YoloModel>,
     messages: Vec<UiMessage>,
@@ -144,8 +178,6 @@ impl Default for ScreenshotApp {
                 PathBuf::from_str("/home/jesko/programmieren/ClashFoFBot/images").unwrap(),
             ),
             available_images: vec![],
-            epoche: "1".to_string(),
-            current_buildings: None,
             selected_model: None,
             selected_yolo_model: None,
             messages: vec![],
@@ -750,8 +782,18 @@ impl ScreenshotApp {
                     let (img, scale) = self.get_scaled_texture(ui, texture);
                     let response = ui.add(img);
 
-                    let buildings: Result<Vec<image_data_wrapper::Building>, FofError> =
-                        self.get_building_thread.get_field("buildings").unwrap();
+                    let buildings_res = self
+                        .get_building_thread
+                        .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>(
+                            "buildings",
+                        );
+
+                    let buildings = if let Some(val) = buildings_res {
+                        val
+                    } else {
+                        self.create_error("Konnte Buildings nicht Laden", MessageType::Error);
+                        Ok(vec![])
+                    };
 
                     if let Err(e) = buildings.clone() {
                         if e == FofError::ThreadNotInitialized {
@@ -822,10 +864,10 @@ impl ScreenshotApp {
 
                         let mut is_training = false;
 
-                        let m = Some(&model.name);
+                        let m = Some(model.name);
 
                         for thrd in self.train_threads.iter() {
-                            if thrd.get_field("model_name") == m {
+                            if m == thrd.poll_field::<String>("model_name") {
                                 if thrd.is_running() {
                                     is_training = true;
                                 }
@@ -834,7 +876,7 @@ impl ScreenshotApp {
 
                         if ui
                             .selectable_label(
-                                self.selected_model.as_ref() == m,
+                                self.selected_model == m,
                                 RichText::new(label).color(if is_training {
                                     Color32::YELLOW
                                 } else {
@@ -854,7 +896,9 @@ impl ScreenshotApp {
                 });
 
             for (idx, thrd) in self.train_threads.iter_mut().enumerate() {
-                if thrd.get_field("model_name") == self.selected_model {
+                if thrd.poll_field::<String>("model_name") == self.selected_model
+                    && self.selected_model.is_some()
+                {
                     if thrd.is_running() {
                         let text = "Stop Training";
                         if ui
@@ -886,10 +930,7 @@ impl ScreenshotApp {
                 .clicked()
             {
                 let wrkh = WorkerHandle::start(
-                    TrainThread {
-                        model_name: self.selected_model.clone().unwrap(),
-                        last_msg: None,
-                    },
+                    TrainThread::new(self.selected_model.clone().unwrap()),
                     true,
                 );
                 self.train_threads.push(wrkh);
@@ -1357,17 +1398,17 @@ impl eframe::App for ScreenshotApp {
             }
             self.update_err(ui, ctx);
 
-            let mut errors = vec![];
-
-            for thrd in self.train_threads.iter() {
-                if let Some(e) = thrd.get_field::<Option<FofError>>("last_msg") {
-                    errors.push(e);
-                }
-            }
-
-            for e in errors {
-                self.create_error(format!("Error while Training: {:?}", e), MessageType::Error);
-            }
+            // let mut errors = vec![];
+            //
+            // for thrd in self.train_threads.iter() {
+            //     if let Some(Some(e)) = thrd.poll_field::<Option<FofError>>("last_msg") {
+            //         errors.push(e);
+            //     }
+            // }
+            //
+            // for e in errors {
+            //     self.create_error(format!("Error while Training: {:?}", e), MessageType::Error);
+            // }
         });
     }
 }

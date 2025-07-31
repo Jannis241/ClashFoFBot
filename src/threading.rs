@@ -15,6 +15,45 @@ pub trait AutoThread: Send + 'static {
     fn handle_field_get(&self, field: &str) -> Option<Box<dyn Any + Send>>;
 }
 
+use std::collections::HashMap;
+
+// Trait AnyClone mit as_any für Downcast-Referenzen
+pub trait AnyClone: Any + Send {
+    fn clone_box(&self) -> Box<dyn AnyClone>;
+
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+impl<T> AnyClone for T
+where
+    T: Any + Send + Clone + 'static,
+{
+    fn clone_box(&self) -> Box<dyn AnyClone> {
+        Box::new(self.clone())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+// Funktion für Box-Downcast
+pub fn downcast_box<T: Any>(b: Box<dyn AnyClone>) -> Result<Box<T>, Box<dyn AnyClone>> {
+    if b.as_any().is::<T>() {
+        // Wir wandeln den Box-Rohzeiger um
+        let raw = Box::into_raw(b);
+        let raw = raw as *mut T;
+        unsafe { Ok(Box::from_raw(raw)) }
+    } else {
+        Err(b)
+    }
+}
+
 pub struct WorkerHandle<T: AutoThread> {
     input_tx: Sender<(
         String,
@@ -25,6 +64,10 @@ pub struct WorkerHandle<T: AutoThread> {
     join_handle: JoinHandle<()>,
     _marker: std::marker::PhantomData<T>,
     running: Arc<AtomicBool>,
+    cache: Mutex<HashMap<String, Box<dyn AnyClone>>>,
+
+    // 🧠 Feld: Ausstehende Feld-Abfragen
+    pending_rx: Arc<Mutex<HashMap<String, Receiver<Box<dyn Any + Send>>>>>,
 }
 
 impl<T: AutoThread> WorkerHandle<T> {
@@ -77,7 +120,9 @@ impl<T: AutoThread> WorkerHandle<T> {
             input_tx,
             stop_tx,
             join_handle,
+            cache: Mutex::new(HashMap::new()),
             running: Arc::new(AtomicBool::new(true)),
+            pending_rx: Arc::new(Mutex::new(HashMap::new())),
             _marker: std::marker::PhantomData,
         }
     }
@@ -96,12 +141,58 @@ impl<T: AutoThread> WorkerHandle<T> {
         let _ = self.input_tx.send((key.to_string(), Box::new(value), None));
     }
 
-    pub fn get_field<U: Any + Send>(&self, key: &str) -> Option<U> {
+    pub fn poll_field<U: Any + Send + Clone>(&self, key: &str) -> Option<U> {
+        // 1. Cache check
+        if let Some(cached_value) = self.cache.lock().unwrap().get(key) {
+            if let Some(value) = cached_value.as_ref().as_any().downcast_ref::<U>() {
+                return Some(value.clone());
+            }
+        }
+
+        // 2. Pending check
+        let mut pending = self.pending_rx.lock().unwrap();
+        if let Some(rx) = pending.get(key) {
+            match rx.try_recv() {
+                Ok(value) => {
+                    // versuche Downcast
+                    if let Ok(boxed_val) = value.downcast::<U>() {
+                        let cloned: U = (*boxed_val).clone(); // aus Box<U> -> U
+                        self.cache.lock().unwrap().insert(
+                            key.to_string(),
+                            Box::new(cloned.clone()) as Box<dyn AnyClone>,
+                        );
+                        pending.remove(key);
+                        return Some(cloned);
+                    } else {
+                        pending.remove(key);
+                        return None;
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => return None,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    // Channel ist tot, entferne pending
+                    pending.remove(key);
+                    return None;
+                }
+            }
+        }
+
+        // 3. Neue Anfrage starten
         let (tx, rx) = channel();
         let _ = self
             .input_tx
             .send((key.to_string(), Box::new(()), Some(tx)));
-        rx.recv().ok()?.downcast::<U>().ok().map(|b| *b)
+        pending.insert(key.to_string(), rx);
+
+        None
+    }
+
+    pub fn get_field_async(&self, key: &str) -> Receiver<Box<dyn Any + Send>> {
+        let (tx, rx) = channel();
+        let _ = self
+            .input_tx
+            .send((key.to_string(), Box::new(()), Some(tx)));
+        rx
     }
 }
 
