@@ -1,12 +1,25 @@
-use crate::prelude::*;
+use crate::{prelude::*, threading::WorkerHandle};
 
 pub fn start_ui() {
     let options = eframe::NativeOptions::default();
-    eframe::run_native(
+    let _ = eframe::run_native(
         "Screenshot Tool",
         options,
         Box::new(|_cc| Ok(Box::new(ui::ScreenshotApp::default()))),
     );
+}
+
+#[derive(Clone, Copy)]
+pub enum MessageType {
+    Success,
+    Warning,
+    Error,
+}
+
+pub struct UiMessage {
+    pub message: String,
+    pub kind: MessageType,
+    pub created: std::time::Instant,
 }
 
 macro_rules! generate_keycode_match {
@@ -43,10 +56,10 @@ impl threading::AutoThread for TrainThread {
     fn run(&mut self) {
         image_data_wrapper::train_model(self.model_name.clone(), 1);
     }
-    fn set_field_any(&mut self, field: &str, value: Box<dyn std::any::Any>) -> bool {
+    fn set_field_any(&mut self, _field: &str, _value: Box<dyn std::any::Any>) -> bool {
         panic!("shouldnt set any fields")
     }
-    fn get_field_any(&self, field: &str) -> Option<&dyn std::any::Any> {
+    fn get_field_any(&self, _field: &str) -> Option<&dyn std::any::Any> {
         panic!("shouldnt get any outputs")
     }
 }
@@ -76,6 +89,7 @@ impl threading::AutoThread for GetBuildingsThread {
     fn get_field_any(&self, field: &str) -> Option<&dyn std::any::Any> {
         match field {
             "buildings" => Some(&self.buildings),
+            "model_name" => Some(&self.model_name),
             other => panic!("is not able to get '{other}'"),
         }
     }
@@ -91,11 +105,12 @@ pub struct ScreenshotApp {
     pub current_buildings: Option<Vec<image_data_wrapper::Building>>,
     selected_model: Option<String>,
     selected_yolo_model: Option<image_data_wrapper::YoloModel>,
+    messages: Vec<UiMessage>,
 
     pub labeling_que: Vec<String>,
     selected_images: HashSet<String>,
 
-    train_threads: Vec<threading::WorkerHandle<TrainThread>>,
+    train_threads: Vec<(threading::WorkerHandle<TrainThread>, String)>,
     get_building_thread: threading::WorkerHandle<GetBuildingsThread>,
 
     active_tab: Tab,
@@ -126,6 +141,7 @@ impl Default for ScreenshotApp {
             epoche: "".to_string(),
             current_buildings: None,
             selected_model: None,
+            messages: vec![],
             new_model_name: "".to_string(),
 
             selected_yolo_model: None,
@@ -152,6 +168,97 @@ impl ScreenshotApp {
         let train_path = Path::new("dataset/images/train").join(filename);
         let val_path = Path::new("dataset/images/val").join(filename);
         train_path.exists() || val_path.exists()
+    }
+
+    pub fn create_error(&mut self, msg: impl Into<String>, kind: MessageType) {
+        self.messages.push(UiMessage {
+            message: msg.into(),
+            kind,
+            created: std::time::Instant::now(),
+        });
+    }
+
+    fn update_err(&mut self, _ui: &mut egui::Ui, ctx: &egui::Context) {
+        let fade_start = std::time::Duration::from_secs(5);
+        let fade_duration = std::time::Duration::from_secs(1);
+        let now = std::time::Instant::now();
+
+        let painter = ctx.layer_painter(egui::LayerId::new(
+            egui::Order::Foreground,
+            egui::Id::new("ui_messages"),
+        ));
+
+        let spacing = 10.0;
+        let mut total_width = 0.0;
+
+        // Zeichne von rechts nach links (neueste Meldung rechts)
+        for msg in self.messages.iter().rev() {
+            let age = now.duration_since(msg.created);
+            let mut alpha = 1.0;
+
+            if age > fade_start {
+                let t = (age - fade_start).as_secs_f32() / fade_duration.as_secs_f32();
+                alpha = 1.0 - t.clamp(0.0, 1.0);
+            }
+
+            if alpha <= 0.0 {
+                continue;
+            }
+
+            let bg_color = match msg.kind {
+                MessageType::Success => {
+                    egui::Color32::from_rgba_unmultiplied(0, 200, 100, (255.0 * alpha) as u8)
+                }
+                MessageType::Warning => {
+                    egui::Color32::from_rgba_unmultiplied(255, 180, 0, (255.0 * alpha) as u8)
+                }
+                MessageType::Error => {
+                    egui::Color32::from_rgba_unmultiplied(200, 50, 50, (255.0 * alpha) as u8)
+                }
+            };
+            let text = egui::RichText::new(&msg.message)
+                .color(bg_color.blend(Color32::GRAY))
+                .strong();
+
+            let padding = egui::vec2(8.0, 4.0);
+
+            let font_id = egui::FontId::proportional(34.0);
+            let max_width = 400.0;
+
+            // `layout` takes a `LayoutJob` or `&str` and a max width.
+            let galley = painter.layout(
+                text.text().to_string(),
+                font_id,
+                bg_color.blend(Color32::from_rgba_unmultiplied(123, 123, 123, 70)),
+                max_width,
+            );
+
+            let size = galley.size() + padding * 2.0;
+
+            let pos = ctx.screen_rect().right_bottom()
+                - egui::vec2(total_width + size.x, size.y + spacing);
+
+            let rect = egui::Rect::from_min_size(pos, size);
+            let rect_expanded = rect.expand2(padding);
+            painter.rect_filled(rect_expanded, 5.0, bg_color);
+            painter.rect_stroke(
+                rect_expanded,
+                5.0,
+                egui::Stroke::new(
+                    5.,
+                    bg_color.blend(Color32::from_rgba_unmultiplied(123, 123, 123, 70)),
+                ),
+                StrokeKind::Middle,
+            );
+
+            painter.galley(pos + padding, galley, Color32::RED);
+
+            total_width += size.x + spacing;
+        }
+
+        // Entferne alte Meldungen
+        self.messages
+            .retain(|msg| now.duration_since(msg.created) < fade_start + fade_duration);
     }
 
     fn update_image_list(&mut self) {
@@ -245,23 +352,21 @@ impl ScreenshotApp {
                 ui.text_edit_singleline(&mut self.keybind);
             });
 
-            ui.horizontal(|ui| {
-                if ui
-                    .button("📂 Speicher Ordner der Screenshots wählen")
-                    .clicked()
-                {
-                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                        self.screenshot_path =
-                            String::from_utf8(path.clone().as_os_str().as_bytes().to_vec())
-                                .unwrap();
-                    }
+            if ui
+                .button("📂 Speicher Ordner der Screenshots wählen")
+                .clicked()
+            {
+                if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                    self.screenshot_path =
+                        String::from_utf8(path.clone().as_os_str().as_bytes().to_vec()).unwrap();
+                    self.create_error("Speicher Ordner Geändert", MessageType::Success);
                 }
+            }
 
-                ui.label(format!(
-                    "📁 Ausgewähter Speicher Ordner: {}",
-                    self.screenshot_path
-                ));
-            });
+            ui.label(format!(
+                "📁 Ausgewähter Speicher Ordner: {}",
+                self.screenshot_path
+            ));
 
             let state = DeviceState::new();
             if state
@@ -495,7 +600,7 @@ impl ScreenshotApp {
 
                         if ui.add(button).clicked() {
                             image_data_wrapper::create_model(
-                                self.new_model_name.clone(),
+                                self.new_model_name.as_str(),
                                 yolo_model.clone(),
                             );
                             self.new_model_name.clear();
@@ -571,7 +676,95 @@ impl ScreenshotApp {
     }
 
     fn model_training(&mut self, ui: &mut egui::Ui) {
-        ui.collapsing("Training", |ui: &mut egui::Ui| {});
+        ui.collapsing("Training", |ui: &mut egui::Ui| {
+            // Modelle holen und nach Score sortieren (absteigend)
+            let mut models = image_data_wrapper::get_model_names();
+            models.sort_by(|a, b| {
+                image_data_wrapper::get_rating(b.clone())
+                    .partial_cmp(&image_data_wrapper::get_rating(a.clone()))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            egui::ComboBox::from_label("Modell Zum Trainieren auswählen")
+                .selected_text(
+                    self.selected_model
+                        .clone()
+                        .unwrap_or_else(|| "Kein Modell gewählt".into()),
+                )
+                .show_ui(ui, |ui| {
+                    for model in models {
+                        let score = image_data_wrapper::get_rating(model.clone());
+                        let label = format!("{model} ({score:.2})");
+
+                        let mut is_training = false;
+
+                        for (thrd, mname) in self.train_threads.iter() {
+                            if *mname == model {
+                                if thrd.is_running() {
+                                    is_training = true;
+                                }
+                            }
+                        }
+
+                        if ui
+                            .selectable_label(
+                                self.selected_model.as_deref() == Some(&model),
+                                RichText::new(label).color(if is_training {
+                                    Color32::YELLOW
+                                } else {
+                                    Color32::RED
+                                }),
+                            )
+                            .clicked()
+                        {
+                            self.selected_model = Some(model.clone());
+                        }
+                    }
+                });
+
+            if self.selected_model.is_none() {
+                let error_text = RichText::new("Kein Model Ausgewählt")
+                    .color(Color32::RED)
+                    .strong(); // optional: makes it bold
+                ui.label(error_text);
+                return;
+            }
+
+            for (idx, (thrd, mname)) in self.train_threads.iter_mut().enumerate() {
+                if Some(mname.clone()) == self.selected_model {
+                    if thrd.is_running() {
+                        let text = "Stop Training";
+                        if ui
+                            .add(
+                                egui::Button::new(RichText::new(text).color(Color32::WHITE))
+                                    .fill(Color32::from_rgb(200, 50, 50)),
+                            )
+                            .clicked()
+                        {
+                            thrd.stop();
+                            self.train_threads.remove(idx);
+                        }
+                        return;
+                    }
+                }
+            }
+
+            let text = "Start Training";
+            if ui
+                .add(
+                    egui::Button::new(RichText::new(text).color(Color32::WHITE))
+                        .fill(Color32::from_rgb(0, 180, 80)), // Grün
+                )
+                .clicked()
+            {
+                let mut wrkh = WorkerHandle::new(TrainThread {
+                    model_name: self.selected_model.clone().unwrap(),
+                });
+                wrkh.start();
+                self.train_threads
+                    .push((wrkh, self.selected_model.clone().unwrap()));
+            }
+        });
     }
 
     fn model(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -872,7 +1065,7 @@ impl ScreenshotApp {
                 self.update_image_texture(ctx, selected.to_string());
 
                 if let Some(texture) = &self.image_texture {
-                    let (img, scale) = self.get_scaled_texture(ui, texture);
+                    let (img, _scale) = self.get_scaled_texture(ui, texture);
                     let response = ui.add(img);
 
                     // Das gezeichnete Rechteck
@@ -916,6 +1109,7 @@ impl eframe::App for ScreenshotApp {
                     self.yolo_label(ui, ctx);
                 }
             }
+            self.update_err(ui, ctx);
         });
     }
 }

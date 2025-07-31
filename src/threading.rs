@@ -19,7 +19,6 @@ macro_rules! auto_set_field {
     };
 }
 
-/// Thread-Wrapper
 pub struct WorkerHandle<T: AutoThread> {
     state: Arc<Mutex<T>>,
     running: Arc<AtomicBool>,
