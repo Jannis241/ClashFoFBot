@@ -16,14 +16,14 @@ DATA_YAML = "dataset/data.yaml"
 
 def create_new_model(model_name, yolo_model):
     model = YOLO(yolo_model)
-    model.train(data=DATA_YAML, epochs=1, name=model_name)
+    model.train(data=DATA_YAML, epochs=1, name=model_name, augment=True)
     print(f"Erstellung von '{model_name}'abgeschlossen. Das Modell findest du unter 'runs/detect/{model_name}/weights/best.pt'")
 
 def train_model(model_name, epochen):
     model_path = f"runs/detect/{model_name}/weights/best.pt"
 
     model = YOLO(model_path)
-    model.train(data=DATA_YAML, epochs=epochen, name=model_name, exist_ok=True)
+    model.train(data=DATA_YAML, epochs=epochen, name=model_name, exist_ok=True,augment=True)
 
     print("Training erfolgreich abgeschlossen.")
 
