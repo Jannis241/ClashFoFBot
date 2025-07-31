@@ -1,6 +1,6 @@
 task: detect
 mode: train
-model: runs/detect/medium_model/weights/best.pt
+model: yolov8s.pt
 data: dataset/data.yaml
 epochs: 1
 time: null
@@ -13,8 +13,8 @@ cache: false
 device: cpu
 workers: 8
 project: null
-name: medium_model
-exist_ok: true
+name: test
+exist_ok: false
 pretrained: true
 optimizer: auto
 verbose: true
@@ -102,4 +102,4 @@ auto_augment: randaugment
 erasing: 0.4
 cfg: null
 tracker: botsort.yaml
-save_dir: runs/detect/medium_model
+save_dir: runs/detect/test

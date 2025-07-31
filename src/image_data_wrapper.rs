@@ -28,7 +28,7 @@ fn calculate_score(m: &Metrics) -> f64 {
 }
 
 fn read_last_metrics(model_name: &String) -> Option<Metrics> {
-    let mut path = format!("runs/detect/{}/results.csv", model_name);
+    let path = format!("runs/detect/{}/results.csv", model_name);
     println!("Getting metrics from {}", path);
     let file = File::open(&path).ok()?;
     let mut rdr = Reader::from_reader(file);
@@ -57,8 +57,57 @@ pub fn get_rating(model_name: String) -> f64 {
     }
 }
 
+use std::fs;
+use std::path::Path;
+
 pub fn get_model_names() -> Vec<String> {
-    vec![]
+    let mut model_names = Vec::new();
+    let path = Path::new("runs/detect");
+
+    let entries = match fs::read_dir(path) {
+        Ok(entries) => {
+            println!("✅ Found directory: {}", path.display());
+            entries
+        }
+        Err(err) => {
+            eprintln!("❌ Failed to read directory '{}': {}", path.display(), err);
+            return model_names;
+        }
+    };
+
+    for entry_result in entries {
+        match entry_result {
+            Ok(entry) => {
+                let metadata = match entry.metadata() {
+                    Ok(md) => md,
+                    Err(err) => {
+                        eprintln!("⚠️ Failed to get metadata for {:?}: {}", entry.path(), err);
+                        continue;
+                    }
+                };
+
+                if metadata.is_dir() {
+                    match entry.file_name().to_str() {
+                        Some(name) => {
+                            println!("📁 Found model directory: {}", name);
+                            model_names.push(name.to_string());
+                        }
+                        None => {
+                            eprintln!(
+                                "⚠️ Invalid UTF-8 in directory name: {:?}",
+                                entry.file_name()
+                            );
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("⚠️ Failed to read a directory entry: {}", err);
+            }
+        }
+    }
+
+    model_names
 }
 
 pub enum YoloModel {
@@ -78,8 +127,9 @@ pub fn get_avg_confidence(buildings: &Vec<Building>) -> f32 {
     return sum / buildings.len() as f32;
 }
 
-pub fn create_model(model_name: String, yolo_model: YoloModel) -> bool {
+pub fn create_model(model_name: &str, yolo_model: YoloModel) -> bool {
     println!("Creating model");
+    let model_name = model_name.to_string();
     if fs::exists(format!("runs/detect/{}", model_name)).unwrap() {
         eprintln!(
             "Es existiert bereits ein model mit dem namen {}. Breche Erstellung ab.",
