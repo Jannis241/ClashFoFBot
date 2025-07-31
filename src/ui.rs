@@ -1013,7 +1013,7 @@ impl ScreenshotApp {
 
             let dataset_paths = [
                 ("dataset_buildings", Regex::new(r"\D+").unwrap()), // Nur Buchstaben
-                ("dataset_levels", Regex::new(r"\d+").unwrap()),    // Nur Ziffern
+                ("dataset_level", Regex::new(r"\d+").unwrap()),     // Nur Ziffern
             ];
 
             for (dataset_base, label_regex) in dataset_paths {

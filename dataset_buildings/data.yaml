@@ -1,6 +1,6 @@
-path: dataset_buildings
 train: images/train
 val: images/val
 names:
-  fufu,
-
+  1: fof
+  0: nike
+  2: sdfsdfsf

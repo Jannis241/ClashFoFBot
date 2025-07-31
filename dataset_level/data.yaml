@@ -1,5 +1,5 @@
-path: dataset_level
 train: images/train
 val: images/val
 names:
-  dede,
+  0: '5'
+  1: '3'
