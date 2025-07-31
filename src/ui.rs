@@ -134,9 +134,19 @@ impl Default for ScreenshotApp {
         Self {
             screenshot_path: "/home/jesko/programmieren/ClashFoFBot/images".to_string(),
             keybind: "r".to_string(),
+            selected_image: None,
             image_folder: Some(
                 PathBuf::from_str("/home/jesko/programmieren/ClashFoFBot/images").unwrap(),
             ),
+            available_images: vec![],
+            epoche: "1".to_string(),
+            current_buildings: None,
+            selected_model: None,
+            selected_yolo_model: None,
+            messages: vec![],
+            labeling_que: vec![],
+            selected_images: HashSet::new(),
+            train_threads: vec![],
             get_building_thread: threading::WorkerHandle::start(
                 GetBuildingsThread {
                     path_to_image: "".to_string(),
@@ -147,7 +157,12 @@ impl Default for ScreenshotApp {
                 true,
             ),
             active_tab: Tab::Settings,
-            ..Default::default()
+            image_texture: None,
+            labeled_rects: vec![],
+            current_rect_start: None,
+            current_rect_end: None,
+            new_model_name: "".to_string(),
+            dataset_mode: image_data_wrapper::DatasetType::Buildings, // Standardwert
         }
     }
 }
