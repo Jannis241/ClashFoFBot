@@ -118,9 +118,9 @@ pub fn get_model_names() -> Result<Vec<String>, FofError> {
     Ok(model_names)
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, EnumIter, Display, Eq, Clone)]
 pub enum YoloModel {
-    yolov8n,
+    YOLOv8n,
     YOLOv8s,
     YOLOv8m,
     YOLOv8l,
@@ -175,11 +175,11 @@ pub fn create_model(model_name: &str, yolo_model: YoloModel) -> Option<FofError>
         }
         Ok(output) => {
             eprintln!("Python error: {}", String::from_utf8_lossy(&output.stderr));
-            Some(FofError::PythonError)
+            Some(FofError::PythonError(output.stderr))
         }
         Err(e) => {
             eprintln!("Failed to start process: {}", e);
-            Some(FofError::FailedToStartPython)
+            Some(FofError::FailedToStartPython(e))
         }
     }
 }
@@ -234,11 +234,11 @@ pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
         }
         Ok(output) => {
             eprintln!("Python Error: {}", String::from_utf8_lossy(&output.stderr));
-            Some(FofError::PythonError)
+            Some(FofError::PythonError(output.stderr))
         }
         Err(e) => {
             eprintln!("Failed to start training process: {}", e);
-            Some(FofError::FailedToStartPython)
+            Some(FofError::FailedToStartPython(e))
         }
     }
 }
@@ -316,14 +316,15 @@ where
             println!("Prediction complete.");
         }
         Ok(output) => {
+            eprintln!("Logs: {}", String::from_utf8_lossy(&output.stdout));
             eprintln!("Python Error: {}", String::from_utf8_lossy(&output.stderr));
             remove_communication();
-            return Err(FofError::PythonError);
+            return Err(FofError::PythonError(output.stderr));
         }
         Err(e) => {
             eprintln!("Failed to start prediction process: {}", e);
             remove_communication();
-            return Err(FofError::FailedToStartPython);
+            return Err(FofError::FailedToStartPython(e));
         }
     }
 
