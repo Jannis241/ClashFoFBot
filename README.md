@@ -3,6 +3,10 @@ foffiger bot fof clash der cläne
 
 auf keinen fall für clash of clans benutzen
 
+## Requirements
+- python
+- rust
+
 ## Installation
 
 
