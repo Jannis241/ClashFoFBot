@@ -12,12 +12,14 @@ pub fn try_all_image_data_wrapper_functions() {
 
     println!("\n==== START TESTING image_data_wrapper ====\n");
 
+    image_data_wrapper::create_model("test_model", YoloModel::yolov8n);
+
     // Setup Testvariablen
     let valid_model = "test_model";
     let invalid_model = "non_existent_model";
-    let valid_image = PathBuf::from("example_data/screenshot.png");
-    let invalid_image = PathBuf::from("example_data/does_not_exist.png");
-    let broken_json_path = PathBuf::from("Communication/data.json");
+    let valid_image = &"images/fufu.png";
+    let invalid_image = &"fof/fofofo.agp";
+    let broken_json_path = &"Test/kaputt.json";
 
     // --- Test: get_model_names ---
     match get_model_names() {
