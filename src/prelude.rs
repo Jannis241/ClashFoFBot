@@ -19,6 +19,7 @@ pub use serde::Serialize;
 // pub use serde_json::Result;
 pub use std::error::Error;
 pub use std::fmt::Debug;
+pub use std::fmt::Display;
 pub use std::fs;
 pub use std::fs::File;
 pub use std::fs::{copy, read_to_string, remove_file, write, OpenOptions};

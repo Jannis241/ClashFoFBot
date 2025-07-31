@@ -9,7 +9,7 @@ def write_data(data):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4)
-    print(f"Daten erfolgreich in {file_path} geschrieben.")
+    print(f"JSON Data erfolgreich in {file_path} geschrieben.")
 
 IMAGE_PATH = "Communication/screenshot.png"
 DATA_YAML = "dataset/data.yaml"
@@ -21,9 +21,6 @@ def create_new_model(model_name, yolo_model):
 
 def train_model(model_name, epochen):
     model_path = f"runs/detect/{model_name}/weights/best.pt"
-    if not os.path.exists(model_path):
-        print("FAILED!!")
-        return
 
     model = YOLO(model_path)
     model.train(data=DATA_YAML, epochs=epochen, name=model_name, exist_ok=True)
@@ -35,10 +32,6 @@ def train_model(model_name, epochen):
 def write_prediction_to_json(model_name, image_path):
 
     model_path = f"runs/detect/{model_name}/weights/best.pt"
-
-    if not os.path.exists(model_path):
-        print("FAILED!!")
-        return
 
     model = YOLO(model_path)
 

@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 use crate::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -142,7 +144,7 @@ pub fn create_model(model_name: &str, yolo_model: YoloModel) -> Option<FofError>
         model_name, yolo_model
     );
 
-    if let Ok(true) = fs::try_exists(format!("runs/detect/{}", model_name)) {
+    if let Ok(true) = fs::exists(format!("runs/detect/{}", model_name)) {
         eprintln!("Error: Model '{}' already exists. Aborting..", model_name);
         return Some(FofError::ModelAlreadyExists);
     }
@@ -188,7 +190,7 @@ pub fn delete_model(model_name: &str) -> Option<FofError> {
     println!("Trying to delete model '{}'..", model_name);
     println!("Searching in: {}", path);
 
-    if let Ok(true) = fs::try_exists(&path) {
+    if let Ok(true) = fs::exists(&path) {
         println!("Found model. Deleting...");
         if let Err(e) = fs::remove_dir_all(&path) {
             eprintln!("Failed to delete {}: {}", path, e);
@@ -206,7 +208,7 @@ pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
     println!("Training model '{}'", model_name);
     let path = format!("runs/detect/{}", model_name);
 
-    if let Ok(false) = fs::try_exists(&path) {
+    if let Ok(false) = fs::exists(&path) {
         eprintln!("Error: Model '{}' not found ({}).", model_name, path);
         return Some(FofError::ModelNotFound(model_name.to_string()));
     }
@@ -242,7 +244,7 @@ pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
 }
 
 fn remove_communication() {
-    if let Ok(true) = fs::try_exists("Communication") {
+    if let Ok(true) = fs::exists("Communication") {
         if let Err(e) = fs::remove_dir_all("Communication") {
             eprintln!("Failed to remove Communication directory: {}", e);
         } else {
@@ -255,10 +257,30 @@ pub fn get_prediction<P>(model_name: &str, screenshot_path: &P) -> Result<Vec<Bu
 where
     P: AsRef<Path>,
     P: Debug,
+    P: Display,
 {
     println!(
         "Getting prediction from model '{}' for {:?}.",
         model_name, screenshot_path
+    );
+
+    let path = format!("runs/detect/{}", model_name);
+
+    if let Ok(false) = fs::exists(&screenshot_path) {
+        eprintln!("Error: No screenshot found in {:?}.", screenshot_path);
+        return Err(FofError::FailedReadingFile(screenshot_path.to_string()));
+    }
+
+    println!("Found screenshot in {}", screenshot_path);
+
+    if let Ok(false) = fs::exists(&path) {
+        eprintln!("Error: Model '{}' not found ({}).", model_name, path);
+        return Err(FofError::ModelNotFound(model_name.to_string()));
+    }
+
+    println!(
+        "Found model '{}' in '{}'. Getting Prediction...",
+        model_name, path
     );
 
     remove_communication();
@@ -266,7 +288,7 @@ where
     println!("Creating temporary communication directory..");
     if let Err(e) = fs::create_dir("Communication") {
         eprintln!("Failed to create Communication dir: {}", e);
-        return Err(FofError::CommunicationError);
+        return Err(FofError::Failed(String::from("Failed to created communication directory (shouldnt be possible to be here, since Communication is deleted before this.)")));
     }
 
     let target = Path::new("Communication/screenshot.png");
@@ -276,7 +298,9 @@ where
             e, screenshot_path, target
         );
         remove_communication();
-        return Err(FofError::CommunicationError);
+        return Err(FofError::Failed(
+            "failed copying image to communication/screenshot.png".to_string(),
+        ));
     }
 
     let output = Command::new("python3")
@@ -303,7 +327,7 @@ where
         }
     }
 
-    if let Ok(false) = fs::try_exists("Communication/data.json") {
+    if let Ok(false) = fs::exists("Communication/data.json") {
         eprintln!("Error: data.json not found.");
         remove_communication();
         return Err(FofError::FailedReadingFile(
