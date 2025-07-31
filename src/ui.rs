@@ -607,18 +607,18 @@ impl ScreenshotApp {
 
             egui::ComboBox::from_id_source("dataset_mode_selector")
                 .selected_text(match self.dataset_mode {
-                    DatasetType::Buildings => "🏗️ Building Model",
-                    DatasetType::Level => "🎯 Level Model",
+                    image_data_wrapper::DatasetType::Buildings => "🏗️ Building Model",
+                    image_data_wrapper::DatasetType::Level => "🎯 Level Model",
                 })
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
                         &mut self.dataset_mode,
-                        DatasetType::Buildings,
+                        image_data_wrapper::DatasetType::Buildings,
                         "🏗️ Building Model",
                     );
                     ui.selectable_value(
                         &mut self.dataset_mode,
-                        DatasetType::Level,
+                        image_data_wrapper::DatasetType::Level,
                         "🎯 Level Model",
                     );
                 });
@@ -766,11 +766,11 @@ impl ScreenshotApp {
     fn model_training(&mut self, ui: &mut egui::Ui) {
         ui.collapsing("Training", |ui: &mut egui::Ui| {
             // Modelle holen und nach Score sortieren (absteigend)
-            let models_result = image_data_wrapper::get_model_names();
+            let models_result = image_data_wrapper::get_all_models();
 
             if let Err(e) = models_result {
                 self.create_error(
-                    format!("Könnte nicht Models laden: {:?}", e),
+                    format!("Konnte nicht Models laden: {:?}", e),
                     MessageType::Error,
                 );
                 return;
@@ -778,64 +778,34 @@ impl ScreenshotApp {
 
             let mut models = models_result.unwrap();
 
-            let mut err = false;
-
             models.sort_by(|a, b| {
-                let rating_res_a = image_data_wrapper::get_rating(&a.clone());
-                if let Err(e) = rating_res_a.clone() {
-                    self.create_error(
-                        format!("Konnte Rating nicht bekommen: {:?}", e),
-                        MessageType::Error,
-                    );
-                    err = true;
-                }
-                let rating_res_b = image_data_wrapper::get_rating(&b.clone());
-                if let Err(e) = rating_res_b.clone() {
-                    self.create_error(
-                        format!("Konnte Rating nicht bekommen: {:?}", e),
-                        MessageType::Error,
-                    );
-                    err = true;
-                }
-
-                if err {
-                    return std::cmp::Ordering::Equal;
-                }
-
-                rating_res_a
-                    .unwrap()
-                    .partial_cmp(&rating_res_b.unwrap())
+                a.rating
+                    .partial_cmp(&b.rating)
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
 
-            if err {
-                return;
-            }
-            egui::ComboBox::from_label("Modell Zum Trainieren auswählen")
+            egui::ComboBox::from_label("Modell auswählen")
                 .selected_text(
                     self.selected_model
                         .clone()
                         .unwrap_or_else(|| "Kein Modell gewählt".into()),
                 )
                 .show_ui(ui, |ui| {
-                    for model in models.iter() {
-                        let score_res = image_data_wrapper::get_rating(&model.clone());
+                    for model in models {
+                        let score = model.rating;
+                        let name = model.name.clone();
 
-                        if let Err(e) = score_res {
-                            self.create_error(
-                                format!("Konnte Rating nicht bekommen: {:?}", e),
-                                MessageType::Error,
-                            );
-                            return;
-                        }
-
-                        let score = score_res.unwrap();
-
-                        let label = format!("{model} ({score:.2})");
+                        let label = format!(
+                            "{name} ({score:.2}) Typ: {}",
+                            match model.dataset_type {
+                                image_data_wrapper::DatasetType::Buildings => "🏗️ Building Model",
+                                image_data_wrapper::DatasetType::Level => "🎯 Level Model",
+                            }
+                        );
 
                         let mut is_training = false;
 
-                        let m = Some(model);
+                        let m = Some(&model.name);
 
                         for thrd in self.train_threads.iter() {
                             if thrd.get_field("model_name") == m {
@@ -856,8 +826,12 @@ impl ScreenshotApp {
                             )
                             .clicked()
                         {
-                            self.selected_model = Some(model.clone());
-                            self.create_error("Changed Model", MessageType::Success);
+                            self.selected_model = Some(name.clone());
+                            self.get_building_thread
+                                .set_field("model_name", name.to_string());
+                            self.get_building_thread
+                                .set_field("should_get_prediction", true);
+                            self.create_error("Model geändert", MessageType::Success);
                         }
                     }
                 });
