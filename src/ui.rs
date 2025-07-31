@@ -1,3 +1,7 @@
+use std::vec;
+
+use eframe::egui::Sense;
+
 use crate::{prelude::*, threading::WorkerHandle};
 
 pub fn start_ui() {
@@ -9,7 +13,7 @@ pub fn start_ui() {
     );
 }
 
-#[derive(Clone, Copy)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum MessageType {
     Success,
     Warning,
@@ -120,7 +124,7 @@ pub struct ScreenshotApp {
     current_rect_start: Option<egui::Pos2>,
     current_rect_end: Option<egui::Pos2>,
     new_model_name: String,
-    dataset_mode: image_data_wrapper::DatasetType,
+    dataset_mode: Option<image_data_wrapper::DatasetType>,
     current_models: Vec<image_data_wrapper::Model>,
 }
 
@@ -132,7 +136,7 @@ struct LabeledRect {
 
 impl Default for ScreenshotApp {
     fn default() -> Self {
-        Self {
+        let mut s = Self {
             screenshot_path: "/home/jesko/programmieren/ClashFoFBot/images".to_string(),
             keybind: "r".to_string(),
             selected_image: None,
@@ -165,7 +169,11 @@ impl Default for ScreenshotApp {
             new_model_name: "".to_string(),
             dataset_mode: None, // Standardwert
             current_models: vec![],
-        }
+        };
+
+        s.reload_models();
+
+        s
     }
 }
 
@@ -185,9 +193,11 @@ impl ScreenshotApp {
     }
 
     fn update_err(&mut self, _ui: &mut egui::Ui, ctx: &egui::Context) {
-        let fade_start = std::time::Duration::from_secs(2);
-        let fade_duration = std::time::Duration::from_secs(1);
+        let fade_start = std::time::Duration::from_secs(1);
+        let fade_duration = std::time::Duration::from_secs(2);
         let now = std::time::Instant::now();
+        let error_multi = 2.;
+        let warning_multi = 1.5;
 
         let max_msgs = 3;
 
@@ -200,16 +210,24 @@ impl ScreenshotApp {
             egui::Id::new("ui_messages"),
         ));
 
-        let spacing = 25.0;
-        let mut total_height = 20.0;
+        let spacing = 20.0;
+        let mut total_height = 15.0;
 
         // Zeichne von rechts nach links (neueste Meldung rechts)
         for msg in self.messages.iter().rev() {
             let age = now.duration_since(msg.created);
             let mut alpha = 1.0;
+            let thismulti = if msg.kind == MessageType::Success {
+                1.
+            } else if msg.kind == MessageType::Warning {
+                warning_multi
+            } else {
+                error_multi
+            };
 
-            if age > fade_start {
-                let t = (age - fade_start).as_secs_f32() / fade_duration.as_secs_f32();
+            if age.as_secs_f32() > fade_start.as_secs_f32() * thismulti {
+                let t = (age.as_secs_f32() - fade_start.as_secs_f32() * thismulti)
+                    / fade_duration.as_secs_f32();
                 alpha = 1.0 - t.clamp(0.0, 1.0);
             }
 
@@ -234,7 +252,7 @@ impl ScreenshotApp {
 
             let padding = egui::vec2(8.0, 4.0);
 
-            let font_id = egui::FontId::proportional(34.0);
+            let font_id = egui::FontId::proportional(28.0);
             let max_width = 400.0;
 
             let dark_col = bg_color.blend(Color32::from_rgba_unmultiplied(50, 50, 50, 177));
@@ -328,19 +346,19 @@ impl ScreenshotApp {
     fn tabs(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             if ui
-                .selectable_label(self.active_tab == Tab::Settings, "⚙️ Einstellungen")
+                .selectable_label(self.active_tab == Tab::Settings, "|Einstellungen|")
                 .clicked()
             {
                 self.active_tab = Tab::Settings;
             }
             if ui
-                .selectable_label(self.active_tab == Tab::YoloLabel, "🖼️ YOLO-Label")
+                .selectable_label(self.active_tab == Tab::YoloLabel, "|YOLO-Label|")
                 .clicked()
             {
                 self.active_tab = Tab::YoloLabel;
             }
             if ui
-                .selectable_label(self.active_tab == Tab::Model, "|| Model")
+                .selectable_label(self.active_tab == Tab::Model, "|Model|")
                 .clicked()
             {
                 self.active_tab = Tab::Model;
@@ -542,20 +560,7 @@ impl ScreenshotApp {
     }
 
     fn show_selectable_models(&mut self, ui: &mut egui::Ui) {
-        // Modelle holen und nach Score sortieren (absteigend)
-        let models_result = image_data_wrapper::get_all_models();
-
-        if let Err(e) = models_result {
-            self.create_error(
-                format!("Konnte nicht Models laden: {:?}", e),
-                MessageType::Error,
-            );
-            return;
-        }
-
-        let mut models = models_result.unwrap();
-
-        models.sort_by(|a, b| {
+        self.current_models.sort_by(|a, b| {
             a.rating
                 .partial_cmp(&b.rating)
                 .unwrap_or(std::cmp::Ordering::Equal)
@@ -568,7 +573,7 @@ impl ScreenshotApp {
                     .unwrap_or_else(|| "Kein Modell gewählt".into()),
             )
             .show_ui(ui, |ui| {
-                for model in models {
+                for model in self.current_models.clone() {
                     let score = model.rating;
                     let name = model.name;
 
@@ -622,24 +627,42 @@ impl ScreenshotApp {
         ui.horizontal(|ui| {
             ui.label("Datensatztyp:");
 
-            egui::ComboBox::from_id_source("dataset_mode_selector")
+            let resp = egui::ComboBox::from_id_source("dataset_mode_selector")
                 .selected_text(match self.dataset_mode {
-                    image_data_wrapper::DatasetType::Buildings => "🏗️ Building Model",
-                    image_data_wrapper::DatasetType::Level => "🎯 Level Model",
+                    None => "Nicht ausgewählt",
+                    Some(image_data_wrapper::DatasetType::Buildings) => "Building Model",
+                    Some(image_data_wrapper::DatasetType::Level) => "Level Model",
                 })
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
                         &mut self.dataset_mode,
-                        image_data_wrapper::DatasetType::Buildings,
-                        "🏗️ Building Model",
+                        Some(image_data_wrapper::DatasetType::Buildings),
+                        "Building Model",
                     );
                     ui.selectable_value(
                         &mut self.dataset_mode,
-                        image_data_wrapper::DatasetType::Level,
-                        "🎯 Level Model",
+                        Some(image_data_wrapper::DatasetType::Level),
+                        "Level Model",
                     );
                 });
+
+            if resp.response.changed() {
+                self.create_error("Datensatztyp geändert", MessageType::Success);
+            }
         });
+    }
+
+    fn reload_models(&mut self) {
+        let model_res = image_data_wrapper::get_all_models();
+
+        if let Ok(ms) = model_res {
+            self.current_models = ms;
+        } else if let Err(e) = model_res {
+            self.create_error(
+                format!("Konnte Models nicht lade: {:?}", e),
+                MessageType::Error,
+            );
+        }
     }
 
     fn manage_models(&mut self, ui: &mut egui::Ui) {
@@ -656,36 +679,30 @@ impl ScreenshotApp {
 
                 if let Some(yolo_model) = &self.selected_yolo_model {
                     if !self.new_model_name.is_empty() {
-                        let button_text = RichText::new("Model Hinzufügen").color(Color32::WHITE);
+                        if let Some(datamode) = self.dataset_mode.clone() {
+                            let button_text =
+                                RichText::new("Model Hinzufügen").color(Color32::WHITE);
 
-                        let button = egui::Button::new(button_text)
-                            .fill(Color32::from_rgb(0, 180, 0)) // grün
-                            .stroke(egui::Stroke::new(1.0, Color32::DARK_GREEN)); // optionaler Rand
+                            let button = egui::Button::new(button_text)
+                                .fill(Color32::from_rgb(0, 180, 0)) // grün
+                                .stroke(egui::Stroke::new(1.0, Color32::DARK_GREEN)); // optionaler Rand
 
-                        if ui.add(button).clicked() {
-                            image_data_wrapper::create_model(
-                                self.new_model_name.as_str(),
-                                self.dataset_mode.clone(),
-                                yolo_model.clone(),
-                            );
-                            self.new_model_name.clear();
-                            self.selected_yolo_model = None;
-                            self.create_error(
-                                format!("Neues Model Erstellt",),
-                                MessageType::Success,
-                            );
+                            if ui.add(button).clicked() {
+                                image_data_wrapper::create_model(
+                                    self.new_model_name.as_str(),
+                                    datamode,
+                                    yolo_model.clone(),
+                                );
+                                self.new_model_name.clear();
+                                self.selected_yolo_model = None;
+                                self.create_error(
+                                    format!("Neues Model Erstellt",),
+                                    MessageType::Success,
+                                );
+                                self.reload_models();
+                            }
                         }
-                    } else {
-                        let error_text = RichText::new("Model Name kann nicht leer sein")
-                            .color(Color32::RED)
-                            .strong(); // optional: makes it bold
-                        ui.label(error_text);
                     }
-                } else {
-                    let error_text = RichText::new("Kein Yolo Model Ausgewählt")
-                        .color(Color32::RED)
-                        .strong(); // optional: makes it bold
-                    ui.label(error_text);
                 }
             });
             ui.group(|ui: &mut egui::Ui| {
@@ -709,14 +726,10 @@ impl ScreenshotApp {
                         } else {
                             self.create_error(format!("Model gelöscht",), MessageType::Success);
                         }
+                        self.reload_models();
 
                         self.selected_model = None;
                     }
-                } else {
-                    let error_text = RichText::new("Kein Model Ausgewählt")
-                        .color(Color32::RED)
-                        .strong(); // optional: makes it bold
-                    ui.label(error_text);
                 }
             });
         });
@@ -782,20 +795,7 @@ impl ScreenshotApp {
 
     fn model_training(&mut self, ui: &mut egui::Ui) {
         ui.collapsing("Training", |ui: &mut egui::Ui| {
-            // Modelle holen und nach Score sortieren (absteigend)
-            let models_result = image_data_wrapper::get_all_models();
-
-            if let Err(e) = models_result {
-                self.create_error(
-                    format!("Konnte nicht Models laden: {:?}", e),
-                    MessageType::Error,
-                );
-                return;
-            }
-
-            let mut models = models_result.unwrap();
-
-            models.sort_by(|a, b| {
+            self.current_models.sort_by(|a, b| {
                 a.rating
                     .partial_cmp(&b.rating)
                     .unwrap_or(std::cmp::Ordering::Equal)
@@ -808,7 +808,7 @@ impl ScreenshotApp {
                         .unwrap_or_else(|| "Kein Modell gewählt".into()),
                 )
                 .show_ui(ui, |ui| {
-                    for model in models {
+                    for model in self.current_models.clone() {
                         let score = model.rating;
                         let name = model.name.clone();
 
@@ -853,14 +853,6 @@ impl ScreenshotApp {
                     }
                 });
 
-            if self.selected_model.is_none() {
-                let error_text = RichText::new("Kein Model Ausgewählt")
-                    .color(Color32::RED)
-                    .strong(); // optional: makes it bold
-                ui.label(error_text);
-                return;
-            }
-
             for (idx, thrd) in self.train_threads.iter_mut().enumerate() {
                 if thrd.get_field("model_name") == self.selected_model {
                     if thrd.is_running() {
@@ -879,6 +871,10 @@ impl ScreenshotApp {
                         return;
                     }
                 }
+            }
+
+            if self.selected_model.is_none() {
+                return;
             }
 
             let text = "Start Training";
@@ -1104,14 +1100,6 @@ impl ScreenshotApp {
                     let raw_label = lr.label.trim();
                     let extracted = label_regex.find(raw_label).map(|m| m.as_str().to_string());
 
-                    if extracted.is_none() {
-                        self.create_error(
-                            &format!("Ungültiges Label: \"{raw_label}\" für {dataset_base}"),
-                            MessageType::Warning,
-                        );
-                        continue;
-                    }
-
                     let extracted_label = extracted.unwrap();
 
                     let class_id = if let Some(id) = class_map.get(&extracted_label) {
@@ -1177,10 +1165,7 @@ impl ScreenshotApp {
                     }
                 }
 
-                self.create_error(
-                    &format!("YOLO-Labels gespeichert unter: {}", label_path.display()),
-                    MessageType::Success,
-                );
+                self.create_error("YOLO-Labels gespeichert", MessageType::Success);
             }
 
             self.labeled_rects.clear();
@@ -1334,7 +1319,7 @@ impl ScreenshotApp {
                     self.handel_labeling_cursor(ui, rect);
                     self.add_lable_to_yaml(ctx);
 
-                    if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    if ctx.input(|i| i.key_pressed(egui::Key::Backspace)) {
                         self.save_labeld_rects(rect.size());
                         self.labeling_que.pop();
                         self.image_texture = None;

@@ -16,6 +16,7 @@ pub struct Building {
     pub bounding_box: (f32, f32, f32, f32),
 }
 
+#[derive(Clone)]
 pub struct Model {
     pub name: String,
     pub rating: f64,
