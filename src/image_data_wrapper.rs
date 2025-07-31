@@ -110,8 +110,9 @@ pub fn get_model_names() -> Vec<String> {
     model_names
 }
 
+#[derive(EnumIter, Display, Clone, PartialEq, Eq, Debug)]
 pub enum YoloModel {
-    yolov8n,
+    YOLOv8n,
     YOLOv8s,
     YOLOv8m, // <-- bestes schnelligkeits / leistungs verhältnis
     YOLOv8l,
@@ -139,7 +140,7 @@ pub fn create_model(model_name: &str, yolo_model: YoloModel) -> bool {
     }
     println!("Parse yolo base model..");
     let yolo_model_string = match yolo_model {
-        YoloModel::yolov8n => String::from("yolov8n.pt"),
+        YoloModel::YOLOv8n => String::from("yolov8n.pt"),
         YoloModel::YOLOv8s => String::from("yolov8s.pt"),
         YoloModel::YOLOv8m => String::from("yolov8m.pt"),
         YoloModel::YOLOv8l => String::from("yolov8l.pt"),

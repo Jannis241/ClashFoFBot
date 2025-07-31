@@ -1,6 +1,4 @@
-use eframe::egui::Widget;
-
-use crate::{image_data_wrapper::Building, prelude::*, threading::AutoThread};
+use crate::prelude::*;
 
 pub fn start_ui() {
     let options = eframe::NativeOptions::default();
@@ -92,6 +90,7 @@ pub struct ScreenshotApp {
     pub epoche: String,
     pub current_buildings: Option<Vec<image_data_wrapper::Building>>,
     selected_model: Option<String>,
+    selected_yolo_model: Option<image_data_wrapper::YoloModel>,
 
     pub labeling_que: Vec<String>,
     selected_images: HashSet<String>,
@@ -129,6 +128,7 @@ impl Default for ScreenshotApp {
             selected_model: None,
             new_model_name: "".to_string(),
 
+            selected_yolo_model: None,
             train_threads: vec![],
             get_building_thread: threading::WorkerHandle::new(GetBuildingsThread {
                 path_to_image: "".to_string(),
@@ -238,10 +238,10 @@ impl ScreenshotApp {
 
     fn keybinds(&mut self, ui: &mut egui::Ui) {
         ui.group(|ui| {
-            ui.heading("Settings");
+            ui.heading("Einstellungen");
             ui.separator();
             ui.horizontal(|ui| {
-                ui.label("Screenshot-Key:");
+                ui.label("Screenshot-Taste:");
                 ui.text_edit_singleline(&mut self.keybind);
             });
 
@@ -383,7 +383,7 @@ impl ScreenshotApp {
     fn draw_buildings(
         &self,
         ui: &mut egui::Ui,
-        buildings: Vec<Building>,
+        buildings: Vec<image_data_wrapper::Building>,
         rect: egui::Rect,
         scale: f32,
     ) {
@@ -444,7 +444,7 @@ impl ScreenshotApp {
                         .selectable_label(self.selected_model.as_deref() == Some(&model), label)
                         .clicked()
                     {
-                        self.selected_model = Some(model);
+                        self.selected_model = Some(model.clone());
                         self.get_building_thread
                             .set_field("model_name", model.to_string());
                     }
@@ -452,18 +452,94 @@ impl ScreenshotApp {
             });
     }
 
-    fn model(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+    fn show_selectable_yolo_models(&mut self, ui: &mut egui::Ui) {
+        egui::ComboBox::from_label("YOLO-Modell wählen")
+            .selected_text(
+                self.selected_yolo_model
+                    .as_ref()
+                    .map(|m| m.to_string())
+                    .unwrap_or_else(|| "Keins gewählt".to_owned()),
+            )
+            .show_ui(ui, |ui| {
+                for model in image_data_wrapper::YoloModel::iter() {
+                    let is_selected = Some(&model) == self.selected_yolo_model.as_ref();
+
+                    if ui
+                        .selectable_label(is_selected, model.to_string())
+                        .clicked()
+                    {
+                        self.selected_yolo_model = Some(model.clone());
+                    }
+                }
+            });
+    }
+
+    fn manage_models(&mut self, ui: &mut egui::Ui) {
         ui.collapsing("Manage Models", |ui: &mut egui::Ui| {
             ui.group(|ui: &mut egui::Ui| {
                 ui.heading("Neues Model Erstellen");
                 ui.separator();
                 ui.horizontal(|ui: &mut egui::Ui| {
-                    ui.label("model namen: ");
+                    ui.label("Model name: ");
                     ui.text_edit_singleline(&mut self.new_model_name);
                 });
+                self.show_selectable_yolo_models(ui);
+
+                if let Some(yolo_model) = &self.selected_yolo_model {
+                    if !self.new_model_name.is_empty() {
+                        let button_text = RichText::new("Model Hinzufügen").color(Color32::WHITE);
+
+                        let button = egui::Button::new(button_text)
+                            .fill(Color32::from_rgb(0, 180, 0)) // grün
+                            .stroke(egui::Stroke::new(1.0, Color32::DARK_GREEN)); // optionaler Rand
+
+                        if ui.add(button).clicked() {
+                            image_data_wrapper::create_model(
+                                self.new_model_name.clone(),
+                                yolo_model.clone(),
+                            );
+                            self.new_model_name.clear();
+                            self.selected_yolo_model = None;
+                        }
+                    } else {
+                        let error_text = RichText::new("Model Name kann nicht leer sein")
+                            .color(Color32::RED)
+                            .strong(); // optional: makes it bold
+                        ui.label(error_text);
+                    }
+                } else {
+                    let error_text = RichText::new("Kein Yolo Model Ausgewählt")
+                        .color(Color32::RED)
+                        .strong(); // optional: makes it bold
+                    ui.label(error_text);
+                }
+            });
+            ui.group(|ui: &mut egui::Ui| {
+                ui.heading("Model Löschen");
+                ui.separator();
+
+                self.show_selectable_models(ui);
+
+                if let Some(name) = &self.selected_model {
+                    if ui
+                        .add(egui::Button::new("Modell löschen").fill(egui::Color32::RED))
+                        .clicked()
+                    {
+                        println!("Modell gelöscht: {name}");
+                        image_data_wrapper::delete_model(name.to_string());
+                        self.selected_model = None;
+                    }
+                } else {
+                    let error_text = RichText::new("Kein Model Ausgewählt")
+                        .color(Color32::RED)
+                        .strong(); // optional: makes it bold
+                    ui.label(error_text);
+                }
             });
         });
-        ui.collapsing("Training", |ui: &mut egui::Ui| {});
+    }
+
+    fn model_testen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.collapsing("Model testen", |ui: &mut egui::Ui| {
             ui.group(|ui: &mut egui::Ui| {
                 self.ordner_wählen(ui, "📂 Speicher Ordner der Test Images wählen");
@@ -480,7 +556,7 @@ impl ScreenshotApp {
 
                     let buildings = self
                         .get_building_thread
-                        .get_output::<Vec<Building>>("buildings");
+                        .get_output::<Vec<image_data_wrapper::Building>>("buildings");
 
                     let rect = response.rect;
 
@@ -492,6 +568,16 @@ impl ScreenshotApp {
                 }
             }
         });
+    }
+
+    fn model_training(&mut self, ui: &mut egui::Ui) {
+        ui.collapsing("Training", |ui: &mut egui::Ui| {});
+    }
+
+    fn model(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        self.manage_models(ui);
+        self.model_training(ui);
+        self.model_testen(ui, ctx);
     }
 
     fn handel_labeling_cursor(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
