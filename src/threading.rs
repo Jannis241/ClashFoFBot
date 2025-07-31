@@ -27,23 +27,61 @@ pub struct WorkerHandle<T: AutoThread> {
 }
 
 impl<T: AutoThread> WorkerHandle<T> {
-    pub fn new(mut obj: T) -> Self {
-        let state = Arc::new(Mutex::new(obj));
-        let state_thread = Arc::clone(&state);
-        let running = Arc::new(AtomicBool::new(true));
-        let running_clone = Arc::clone(&running);
-
-        let handle = thread::spawn(move || {
-            let mut obj = state_thread.lock().unwrap();
-            obj.run();
-            running_clone.store(false, Ordering::SeqCst);
-        });
-
+    pub fn new(state: T) -> Self {
         Self {
-            state,
-            running,
-            join_handle: Some(handle),
+            state: Arc::new(Mutex::new(state)),
+            running: Arc::new(AtomicBool::new(false)),
+            join_handle: None,
         }
+    }
+
+    /// Startet den Thread im Loop-Modus
+    pub fn start(&mut self) {
+        if self.running.load(Ordering::SeqCst) {
+            return; // Schon gestartet
+        }
+
+        self.running.store(true, Ordering::SeqCst);
+        let running = Arc::clone(&self.running);
+        let state = Arc::clone(&self.state);
+
+        self.join_handle = Some(thread::spawn(move || {
+            while running.load(Ordering::SeqCst) {
+                let mut state = state.lock().unwrap();
+                state.run();
+            }
+        }));
+    }
+
+    /// Führt `run()` genau einmal aus
+    pub fn start_once(&mut self) {
+        if self.running.load(Ordering::SeqCst) {
+            return;
+        }
+
+        self.running.store(true, Ordering::SeqCst);
+        let running = Arc::clone(&self.running);
+        let state = Arc::clone(&self.state);
+
+        self.join_handle = Some(thread::spawn(move || {
+            {
+                let mut state = state.lock().unwrap();
+                state.run();
+            }
+            running.store(false, Ordering::SeqCst);
+        }));
+    }
+
+    /// Beendet den Thread (nur bei `start`)
+    pub fn stop(&mut self) {
+        self.running.store(false, Ordering::SeqCst);
+        if let Some(handle) = self.join_handle.take() {
+            let _ = handle.join();
+        }
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.running.load(Ordering::SeqCst)
     }
 
     pub fn set_field<U: 'static>(&self, key: &str, value: U) {
@@ -67,16 +105,6 @@ impl<T: AutoThread> WorkerHandle<T> {
     {
         let state = self.state.lock().unwrap();
         f(&*state)
-    }
-
-    pub fn is_running(&self) -> bool {
-        self.running.load(Ordering::SeqCst)
-    }
-
-    pub fn stop(mut self) {
-        if let Some(handle) = self.join_handle.take() {
-            let _ = handle.join();
-        }
     }
 }
 

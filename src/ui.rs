@@ -43,7 +43,7 @@ struct TrainThread {
 
 impl threading::AutoThread for TrainThread {
     fn run(&mut self) {
-        // image_data_wrapper::train_model(1);
+        image_data_wrapper::train_model(self.model_name.clone(), 1);
     }
     fn set_field_any(&mut self, field: &str, value: Box<dyn std::any::Any>) -> bool {
         panic!("shouldnt set any fields")
@@ -56,11 +56,17 @@ impl threading::AutoThread for TrainThread {
 struct GetBuildingsThread {
     path_to_image: String,
     buildings: Vec<image_data_wrapper::Building>,
+    model_name: String,
 }
 
 impl threading::AutoThread for GetBuildingsThread {
     fn run(&mut self) {
-        // self.buildings = image_data_wrapper::get_buildings(&Path::new(&self.path_to_image));
+        let res;
+        (self.buildings, res) = image_data_wrapper::get_buildings(
+            self.model_name.clone(),
+            &Path::new(&self.path_to_image),
+        );
+        assert_eq!(res, true);
     }
     fn set_field_any(&mut self, field: &str, value: Box<dyn std::any::Any>) -> bool {
         auto_set_field!(field, value, "path_to_image", |val: String| self
@@ -85,18 +91,21 @@ pub struct ScreenshotApp {
     pub available_images: Vec<String>,
     pub epoche: String,
     pub current_buildings: Option<Vec<image_data_wrapper::Building>>,
+    selected_model: Option<String>,
 
     pub labeling_que: Vec<String>,
     selected_images: HashSet<String>,
 
-    train_threads: Vec<TrainThread>,
-    get_building_thread: GetBuildingsThread,
+    train_threads: Vec<threading::WorkerHandle<TrainThread>>,
+    get_building_thread: threading::WorkerHandle<GetBuildingsThread>,
 
     active_tab: Tab,
     image_texture: Option<egui::TextureHandle>,
     labeled_rects: Vec<LabeledRect>,
     current_rect_start: Option<egui::Pos2>,
     current_rect_end: Option<egui::Pos2>,
+
+    new_model_name: String,
 }
 
 #[derive(Clone)]
@@ -117,12 +126,15 @@ impl Default for ScreenshotApp {
             selected_images: HashSet::new(),
             epoche: "".to_string(),
             current_buildings: None,
+            selected_model: None,
+            new_model_name: "".to_string(),
 
             train_threads: vec![],
-            get_building_thread: GetBuildingsThread {
+            get_building_thread: threading::WorkerHandle::new(GetBuildingsThread {
                 path_to_image: "".to_string(),
                 buildings: vec![],
-            },
+                model_name: "".to_string(),
+            }),
             labeling_que: vec![],
 
             available_images: vec![],
@@ -234,7 +246,10 @@ impl ScreenshotApp {
             });
 
             ui.horizontal(|ui| {
-                if ui.button("📂 Speicher Ordner wählen").clicked() {
+                if ui
+                    .button("📂 Speicher Ordner der Screenshots wählen")
+                    .clicked()
+                {
                     if let Some(path) = rfd::FileDialog::new().pick_folder() {
                         self.screenshot_path =
                             String::from_utf8(path.clone().as_os_str().as_bytes().to_vec())
@@ -242,7 +257,10 @@ impl ScreenshotApp {
                     }
                 }
 
-                ui.label(format!("📁 Speicher Ordner: {}", self.screenshot_path));
+                ui.label(format!(
+                    "📁 Ausgewähter Speicher Ordner: {}",
+                    self.screenshot_path
+                ));
             });
 
             let state = DeviceState::new();
@@ -269,11 +287,8 @@ impl ScreenshotApp {
         println!("📸 Screenshot gespeichert unter: {}", save_path.display());
     }
 
-    fn ordner_wählen(&mut self, ui: &mut egui::Ui) {
-        if ui
-            .button("📂 Speicher Ordner der Screenshots wählen")
-            .clicked()
-        {
+    fn ordner_wählen(&mut self, ui: &mut egui::Ui, message: &str) {
+        if ui.button(message).clicked() {
             if let Some(path) = rfd::FileDialog::new().pick_folder() {
                 self.image_folder = Some(path.clone());
                 self.image_texture = None;
@@ -281,10 +296,7 @@ impl ScreenshotApp {
         }
 
         if let Some(folder) = &self.image_folder {
-            ui.label(format!(
-                "📁 Speicher Ordner der Screenshots: {}",
-                folder.display()
-            ));
+            ui.label(format!("📁 Ausgewählter Ordner: {}", folder.display()));
         }
     }
 
@@ -331,10 +343,9 @@ impl ScreenshotApp {
             });
 
         if resp.response.changed() {
-            self.get_building_thread.set_field_any(
-                "path_to_image",
-                Box::new(self.selected_image.clone().unwrap()),
-            );
+            self.get_building_thread
+                .set_field("path_to_image", self.selected_image.clone().unwrap());
+            self.get_building_thread.start_once();
         }
     }
 
@@ -409,9 +420,54 @@ impl ScreenshotApp {
         }
     }
 
+    fn show_selectable_models(&mut self, ui: &mut egui::Ui) {
+        // Modelle holen und nach Score sortieren (absteigend)
+        let mut models = image_data_wrapper::get_models();
+        models.sort_by(|a, b| {
+            image_data_wrapper::get_score(b.clone())
+                .partial_cmp(&image_data_wrapper::get_score(a.clone()))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        egui::ComboBox::from_label("Modell auswählen")
+            .selected_text(
+                self.selected_model
+                    .clone()
+                    .unwrap_or_else(|| "Kein Modell gewählt".into()),
+            )
+            .show_ui(ui, |ui| {
+                for model in models {
+                    let score = image_data_wrapper::get_score(model.clone());
+                    let label = format!("{model} ({score:.2})");
+
+                    if ui
+                        .selectable_label(self.selected_model.as_deref() == Some(&model), label)
+                        .clicked()
+                    {
+                        self.selected_model = Some(model);
+                        self.get_building_thread
+                            .set_field("model_name", model.to_string());
+                    }
+                }
+            });
+    }
+
     fn model(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        ui.collapsing("Manage Models", |ui: &mut egui::Ui| {
+            ui.group(|ui: &mut egui::Ui| {
+                ui.heading("Neues Model Erstellen");
+                ui.separator();
+                ui.text_edit_singleline(&mut self.new_model_name);
+            });
+        });
         ui.collapsing("Training", |ui: &mut egui::Ui| {});
         ui.collapsing("Model testen", |ui: &mut egui::Ui| {
+            ui.group(|ui: &mut egui::Ui| {
+                self.ordner_wählen(ui, "📂 Speicher Ordner der Test Images wählen");
+                self.show_available_pngs(ui);
+                self.update_image_list();
+                self.show_selectable_models(ui);
+            });
             if let Some(selected) = &self.selected_image {
                 self.update_image_texture(ctx, selected.to_string());
 
@@ -419,16 +475,17 @@ impl ScreenshotApp {
                     let (img, scale) = self.get_scaled_texture(ui, texture);
                     let response = ui.add(img);
 
-                    let buildings: Vec<Building> = self
+                    let buildings = self
                         .get_building_thread
-                        .get_field_any("buildings")
-                        .unwrap()
-                        .downcast_ref::<Vec<Building>>()
-                        .unwrap()
-                        .to_vec();
+                        .get_output::<Vec<Building>>("buildings");
 
                     let rect = response.rect;
-                    self.draw_buildings(ui, buildings, rect, scale);
+
+                    if let Some(buildings) = buildings {
+                        let avg_confidence = image_data_wrapper::get_avg_confidence(&buildings);
+                        ui.label(format!("Durchschnittliche Confidence: {}", avg_confidence));
+                        self.draw_buildings(ui, buildings, rect, scale);
+                    }
                 }
             }
         });
@@ -712,7 +769,8 @@ impl ScreenshotApp {
             ui.group(|ui| {
                 ui.heading("Png(s) Zum Labeln Wählen");
                 ui.separator();
-                self.ordner_wählen(ui);
+                self.ordner_wählen(ui, "📂 Speicher Ordner der zu Labelnden Images wählen");
+                self.show_available_pngs(ui);
                 self.update_image_list();
                 self.show_available_pngs_multiple(ui);
             });
