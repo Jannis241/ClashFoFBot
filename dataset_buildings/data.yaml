@@ -2,5 +2,6 @@ train: images/train
 val: images/val
 names:
   1: fof
+  3: nik
   0: nike
   2: sdfsdfsf

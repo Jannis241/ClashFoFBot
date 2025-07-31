@@ -1,11 +1,3 @@
-- tab + ENTER fixxen, dass man nicht auf Einstellungen wechselt
-- Warning weg machen wenn man kein Level an gibt
-- Nachrichten an der Seite etwas kleiner und knapper machen
-    - z.b anstatt zu sagen dass das label unter ... gespeichert wurde etc einfach
-    nur einmal "gespeichert" oder so
-- get model nur am anfang callen und wenn sich was verändert (neues model oder model gelöscht)
-- den create model button erst anzeigen wenn alles ausgewählt ist, dafür die rote schrift weg
-- bei der entscheidung von dem data set bei create model auch erstmal keine option auswählen
-- Grüne nachrichten können ruhig etwas schneller weg gehen, rote dafür etwas länger behalten (trotzdem kleiner und knapper halten)
-- dumme function calls weg machen (wenn die immer gecallt werden obwohl die grade nicht gebraucht werden und immer nur errors returnen)
-
+bei model testen einen button hinzufügen der auf drück ein neues fenster mit der prediction öffnet/anzeigtbei model testen einen button hinzufügen der auf drück ein neues fenster mit der prediction öffnet/anzeigt!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

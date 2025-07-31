@@ -225,7 +225,7 @@ impl ScreenshotApp {
     }
 
     fn update_err(&mut self, _ui: &mut egui::Ui, ctx: &egui::Context) {
-        let fade_start = std::time::Duration::from_secs(1);
+        let fade_start = std::time::Duration::from_secs(4);
         let fade_duration = std::time::Duration::from_secs(2);
         let now = std::time::Instant::now();
         let error_multi = 2.;
@@ -284,7 +284,7 @@ impl ScreenshotApp {
 
             let padding = egui::vec2(8.0, 4.0);
 
-            let font_id = egui::FontId::proportional(28.0);
+            let font_id = egui::FontId::proportional(15.0);
             let max_width = 400.0;
 
             let dark_col = bg_color.blend(Color32::from_rgba_unmultiplied(50, 50, 50, 177));
@@ -768,71 +768,74 @@ impl ScreenshotApp {
     }
 
     fn model_testen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        ui.collapsing("Model testen", |ui: &mut egui::Ui| {
-            ui.group(|ui: &mut egui::Ui| {
-                self.ordner_wählen(ui, "📂 Speicher Ordner der Test Images wählen");
-                self.show_available_pngs(ui);
-                self.update_image_list();
-                self.show_selectable_models(ui);
-            });
-            if let Some(selected) = &self.selected_image {
-                self.update_image_texture(ctx, selected.to_string());
+        ui.collapsing(
+            "Model testen, (TOTOTOTOTOTOTOTODODODODODODODOOTOODODOTDOTDOTDODTOTDOOTOTDODT)",
+            |ui: &mut egui::Ui| {
+                ui.group(|ui: &mut egui::Ui| {
+                    self.ordner_wählen(ui, "📂 Speicher Ordner der Test Images wählen");
+                    self.show_available_pngs(ui);
+                    self.update_image_list();
+                    self.show_selectable_models(ui);
+                });
+                if let Some(selected) = &self.selected_image {
+                    self.update_image_texture(ctx, selected.to_string());
 
-                if let Some(texture) = &self.image_texture {
-                    let (img, scale) = self.get_scaled_texture(ui, texture);
-                    let response = ui.add(img);
+                    if let Some(texture) = &self.image_texture {
+                        let (img, scale) = self.get_scaled_texture(ui, texture);
+                        let response = ui.add(img);
 
-                    let buildings_res = self
-                        .get_building_thread
-                        .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>(
-                            "buildings",
-                        );
+                        let buildings_res =
+                            self.get_building_thread
+                                .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>(
+                                    "buildings",
+                                );
 
-                    let buildings = if let Some(val) = buildings_res {
-                        val
-                    } else {
-                        self.create_error("Konnte Buildings nicht Laden", MessageType::Error);
-                        Ok(vec![])
-                    };
-
-                    if let Err(e) = buildings.clone() {
-                        if e == FofError::ThreadNotInitialized {
-                            self.create_error(
-                                "Thread um Buildings zu bekommen ist noch nicht inizialisiert",
-                                MessageType::Warning,
-                            );
+                        let buildings = if let Some(val) = buildings_res {
+                            val
                         } else {
-                            self.create_error(
-                                format!("Konnte Buildings nicht bekommen: {:?}", e),
-                                MessageType::Error,
-                            );
+                            self.create_error("Konnte Buildings nicht Laden", MessageType::Error);
+                            Ok(vec![])
+                        };
+
+                        if let Err(e) = buildings.clone() {
+                            if e == FofError::ThreadNotInitialized {
+                                self.create_error(
+                                    "Thread um Buildings zu bekommen ist noch nicht inizialisiert",
+                                    MessageType::Warning,
+                                );
+                            } else {
+                                self.create_error(
+                                    format!("Konnte Buildings nicht bekommen: {:?}", e),
+                                    MessageType::Error,
+                                );
+                            }
                         }
-                    }
 
-                    let rect = response.rect;
+                        let rect = response.rect;
 
-                    if let Ok(buildings) = buildings {
-                        let avg_confidence = image_data_wrapper::get_avg_confidence(&buildings);
+                        if let Ok(buildings) = buildings {
+                            let avg_confidence = image_data_wrapper::get_avg_confidence(&buildings);
 
-                        if let Err(e) = avg_confidence.clone() {
-                            self.create_error(
-                                format!(
+                            if let Err(e) = avg_confidence.clone() {
+                                self.create_error(
+                                    format!(
                                     "Konnte die Durchschnittliche Confidence nicht bekommen: {:?}",
                                     e
                                 ),
-                                MessageType::Error,
-                            );
-                        }
+                                    MessageType::Error,
+                                );
+                            }
 
-                        if let Ok(avg) = avg_confidence {
-                            ui.label(format!("Durchschnittliche Confidence: {}", avg));
-                        }
+                            if let Ok(avg) = avg_confidence {
+                                ui.label(format!("Durchschnittliche Confidence: {}", avg));
+                            }
 
-                        self.draw_buildings(ui, buildings, rect, scale);
+                            self.draw_buildings(ui, buildings, rect, scale);
+                        }
                     }
                 }
-            }
-        });
+            },
+        );
     }
 
     fn model_training(&mut self, ui: &mut egui::Ui) {
@@ -1140,6 +1143,10 @@ impl ScreenshotApp {
                 for lr in self.labeled_rects.clone().iter() {
                     let raw_label = lr.label.trim();
                     let extracted = label_regex.find(raw_label).map(|m| m.as_str().to_string());
+
+                    if extracted.is_none() {
+                        continue;
+                    }
 
                     let extracted_label = extracted.unwrap();
 
