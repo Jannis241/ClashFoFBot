@@ -3,7 +3,8 @@ use crate::prelude::*;
 
 pub fn run_tests() {
     println!("Running tests..");
-    try_all_image_data_wrapper_functions();
+    // image_data_wrapper::read_number(&String::from("images/test.png"));
+    // try_all_image_data_wrapper_functions();
 }
 
 pub fn try_all_image_data_wrapper_functions() {

@@ -8,6 +8,36 @@ pub struct Building {
     pub bounding_box: (f32, f32, f32, f32),
 }
 
+// funktioniert nicht weil man das immer erst von git runter laden muss und dann in den path packen
+pub fn read_number(image_path: &String) -> Result<i32, FofError> {
+    if let Ok(false) = fs::exists(image_path) {
+        eprintln!("Image path '{}' nicht gefunden.", image_path);
+        return Err(FofError::FailedReadingFile(image_path.clone()));
+    }
+
+    match Command::new("python3")
+        .arg("src/image_data.py")
+        .arg("--zahl_erkennen")
+        .arg("--path")
+        .arg(image_path)
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            println!("{}", String::from_utf8_lossy(&output.stdout));
+            println!("Python script executed.");
+            Ok(0)
+        }
+        Ok(output) => {
+            eprintln!("Python error: {}", String::from_utf8_lossy(&output.stderr));
+            Err(FofError::PythonError(output.stderr))
+        }
+        Err(e) => {
+            eprintln!("Failed to start process: {}", e);
+            Err(FofError::FailedToStartPython)
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct Metrics {
     #[serde(rename = "metrics/precision(B)")]

@@ -1,5 +1,5 @@
 ultralytics
 torch
 numpy
-cv2
 pytesseract
+opencv-python
