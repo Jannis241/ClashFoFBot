@@ -53,7 +53,7 @@ pub fn get_rating(model_name: String) -> f64 {
         return calculate_score(&m);
     } else {
         eprintln!("Error: Keine Metrics für {} gefunden!", model_name);
-        return 0.0;
+        return -69.0;
     }
 }
 
