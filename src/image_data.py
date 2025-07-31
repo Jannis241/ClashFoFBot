@@ -2,6 +2,23 @@ import json
 import os
 from ultralytics import YOLO
 import argparse
+import cv2
+import pytesseract
+
+
+
+def read_number(path):
+    img = cv2.imread(path)
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    _, thresh = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
+
+    custom_config = r'--oem 3 --psm 6 outputbase digits'
+    text = pytesseract.image_to_string(thresh, config=custom_config)
+
+    return text
+
+
 
 
 def write_data(data):
@@ -59,6 +76,8 @@ def write_prediction_to_json(model_name, image_path):
 
 parser = argparse.ArgumentParser(description="Trainings- und Vorhersagemodus für YOLO Modell")
 
+parser.add_argument('--zahl_erkennen', action='store_true', help='zahl erkennen')
+parser.add_argument('--path', type=str, default=None, help='path zum image')
 parser.add_argument('--create-model', action='store_true', help='Erstelle ein neues Modell mit einem bestimmten Namen')
 parser.add_argument('--train', action='store_true', help='Starte ein neues Training')
 parser.add_argument('--predict', action='store_true', help='Mache eine Vorhersage mit dem Modell')
@@ -70,6 +89,11 @@ parser.add_argument('--base', type=str, default=None, help='YOLO-Modellbasis (z.
 args = parser.parse_args()
 
 epochs = args.epochs
+
+if args.zahl_erkennen:
+    text = read_number(args.path)
+    with open("Communication/number.txt", 'w', encoding='utf-8') as f:
+        f.write(text)
 
 if args.create_model:
     create_new_model(args.model_name, args.base)

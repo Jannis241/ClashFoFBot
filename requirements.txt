@@ -1,4 +1,5 @@
 ultralytics
 torch
 numpy
-
+cv2
+pytesseract
