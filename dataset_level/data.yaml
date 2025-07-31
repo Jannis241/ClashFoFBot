@@ -1,0 +1,4 @@
+path: dataset_level
+train: images/train
+val: images/val
+names:

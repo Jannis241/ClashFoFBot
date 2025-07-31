@@ -1,7 +1,5 @@
-path: dataset
+path: dataset_buildings
 train: images/train
 val: images/val
 names:
-  0: nike
-  1: adidas
 

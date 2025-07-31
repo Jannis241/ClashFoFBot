@@ -1,5 +1,11 @@
 use crate::prelude::*;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum DatasetType {
+    Buildings,
+    Level,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Building {
     pub class_id: i32,
