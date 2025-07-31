@@ -422,10 +422,10 @@ impl ScreenshotApp {
 
     fn show_selectable_models(&mut self, ui: &mut egui::Ui) {
         // Modelle holen und nach Score sortieren (absteigend)
-        let mut models = image_data_wrapper::get_models();
+        let mut models = image_data_wrapper::get_model_names();
         models.sort_by(|a, b| {
-            image_data_wrapper::get_score(b.clone())
-                .partial_cmp(&image_data_wrapper::get_score(a.clone()))
+            image_data_wrapper::get_rating(b.clone())
+                .partial_cmp(&image_data_wrapper::get_rating(a.clone()))
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
@@ -437,7 +437,7 @@ impl ScreenshotApp {
             )
             .show_ui(ui, |ui| {
                 for model in models {
-                    let score = image_data_wrapper::get_score(model.clone());
+                    let score = image_data_wrapper::get_rating(model.clone());
                     let label = format!("{model} ({score:.2})");
 
                     if ui
@@ -457,7 +457,10 @@ impl ScreenshotApp {
             ui.group(|ui: &mut egui::Ui| {
                 ui.heading("Neues Model Erstellen");
                 ui.separator();
-                ui.text_edit_singleline(&mut self.new_model_name);
+                ui.horizontal(|ui: &mut egui::Ui| {
+                    ui.label("model namen: ");
+                    ui.text_edit_singleline(&mut self.new_model_name);
+                });
             });
         });
         ui.collapsing("Training", |ui: &mut egui::Ui| {});
