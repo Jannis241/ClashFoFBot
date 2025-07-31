@@ -151,7 +151,7 @@ pub fn create_model(model_name: &str, yolo_model: YoloModel) -> Option<FofError>
 
     println!("Parsing YOLO base model..");
     let yolo_model_string = match yolo_model {
-        YoloModel::yolov8n => "yolov8n.pt",
+        YoloModel::YOLOv8n => "yolov8n.pt",
         YoloModel::YOLOv8s => "yolov8s.pt",
         YoloModel::YOLOv8m => "yolov8m.pt",
         YoloModel::YOLOv8l => "yolov8l.pt",

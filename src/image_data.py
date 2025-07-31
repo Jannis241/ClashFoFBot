@@ -36,6 +36,9 @@ def write_prediction_to_json(model_name, image_path):
     model = YOLO(model_path)
 
     results = model.predict(source=image_path)[0]
+
+   # results.show()
+
     class_names = model.names  # z. B. {0: "cannon", 1: "elixir", ...}
 
     output = []
