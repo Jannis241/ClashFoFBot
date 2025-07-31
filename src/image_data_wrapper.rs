@@ -88,6 +88,7 @@ fn calculate_score(m: &Metrics) -> f64 {
 
 fn read_last_metrics(model_name: &str) -> Option<Metrics> {
     let path = format!("runs/detect/{}/results.csv", model_name);
+    println!("Trying to read last metrics from {}", path);
     let file = File::open(&path).ok()?;
     let mut rdr = Reader::from_reader(file);
     let mut last: Option<Metrics> = None;
@@ -111,8 +112,9 @@ fn get_rating(model_name: &str) -> Result<f64, FofError> {
     }
 }
 
-pub fn get_dataset_type(name: &str) -> Result<DatasetType, FofError> {
+fn get_dataset_type(name: &str) -> Result<DatasetType, FofError> {
     let path = format!("runs/detect/{}/args.yaml", name);
+    println!("Searching for {}", path);
     let file = File::open(&path).map_err(|_| FofError::FailedReadingFile(path.clone()))?;
 
     let args: ArgsYaml =
@@ -178,6 +180,10 @@ pub fn get_all_models() -> Result<Vec<Model>, FofError> {
                                 Ok(r) => r,
                                 Err(fof_error) => return Err(fof_error),
                             };
+                            println!(
+                                "Sucessfully got rating and dataset_type for model '{}'.",
+                                name
+                            );
 
                             let m = Model::new(name.to_string(), rating, dataset_type);
                             models.push(m);
@@ -204,6 +210,8 @@ pub fn get_all_models() -> Result<Vec<Model>, FofError> {
             }
         }
     }
+
+    println!("Sucessfully found {} models.", models.len());
 
     Ok(models)
 }

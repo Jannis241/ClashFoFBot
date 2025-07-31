@@ -10,10 +10,10 @@ pub fn run_tests() {
         YoloModel::YOLOv8n,
     );
 
-    println!(
-        "{:?}",
-        image_data_wrapper::get_dataset_type("buildings_test")
-    );
+    // println!(
+    //     "{:?}",
+    //     image_data_wrapper::get_dataset_type("buildings_test")
+    // );
 
     image_data_wrapper::create_model(
         "fufu_model",
