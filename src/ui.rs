@@ -76,10 +76,8 @@ struct GetBuildingsThread {
 
 impl threading::AutoThread for GetBuildingsThread {
     fn run(&mut self) {
-        self.buildings = image_data_wrapper::get_prediction(
-            &self.model_name.clone(),
-            &Path::new(&self.path_to_image),
-        );
+        self.buildings =
+            image_data_wrapper::get_prediction(&self.model_name.clone(), &self.path_to_image);
     }
     fn handle_field_get(&self, field: &str) -> Option<Box<dyn std::any::Any + Send>> {
         auto_get_field!(self, field, {

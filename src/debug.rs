@@ -12,7 +12,7 @@ pub fn try_all_image_data_wrapper_functions() {
 
     println!("\n==== START TESTING image_data_wrapper ====\n");
 
-    image_data_wrapper::create_model("test_model", YoloModel::yolov8n);
+    image_data_wrapper::create_model("test_model", YoloModel::YOLOv8n);
 
     // Setup Testvariablen
     let valid_model = "test_model";
@@ -30,7 +30,7 @@ pub fn try_all_image_data_wrapper_functions() {
     // --- Test: create_model ---
     println!("\n-- create_model --");
     let _ = delete_model(valid_model); // ensure clean state
-    match create_model(valid_model, YoloModel::yolov8n) {
+    match create_model(valid_model, YoloModel::YOLOv8n) {
         None => println!("✅ create_model succeeded"),
         Some(e) => println!("❌ create_model failed: {:?}", e),
     }

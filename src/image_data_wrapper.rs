@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 use crate::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -179,7 +177,7 @@ pub fn create_model(model_name: &str, yolo_model: YoloModel) -> Option<FofError>
         }
         Err(e) => {
             eprintln!("Failed to start process: {}", e);
-            Some(FofError::FailedToStartPython(e))
+            Some(FofError::FailedToStartPython)
         }
     }
 }
@@ -238,7 +236,7 @@ pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
         }
         Err(e) => {
             eprintln!("Failed to start training process: {}", e);
-            Some(FofError::FailedToStartPython(e))
+            Some(FofError::FailedToStartPython)
         }
     }
 }
@@ -324,7 +322,7 @@ where
         Err(e) => {
             eprintln!("Failed to start prediction process: {}", e);
             remove_communication();
-            return Err(FofError::FailedToStartPython(e));
+            return Err(FofError::FailedToStartPython);
         }
     }
 
