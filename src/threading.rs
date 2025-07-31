@@ -1,141 +1,137 @@
-use crate::prelude::*;
+use std::{
+    any::Any,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{channel, Receiver, Sender},
+        Arc, Mutex,
+    },
+    thread::{self, JoinHandle},
+    time::Duration,
+};
 
-/// Automatischer Feldzugriff – wird intern verwendet
 pub trait AutoThread: Send + 'static {
-    fn run(&mut self); // Benutzerdefiniert
-    fn set_field_any(&mut self, field: &str, value: Box<dyn std::any::Any>) -> bool;
-    fn get_field_any(&self, field: &str) -> Option<&dyn std::any::Any>;
-}
-
-#[macro_export]
-macro_rules! auto_set_field {
-    ($field:expr, $value:expr, $field_name:literal, |$arg:ident : $ty:ty| $body:expr) => {
-        if $field == $field_name {
-            if let Ok($arg) = $value.downcast::<$ty>() {
-                $body;
-                return true;
-            }
-        }
-    };
+    fn run(&mut self);
+    fn handle_field_set(&mut self, field: &str, value: Box<dyn Any + Send>);
+    fn handle_field_get(&self, field: &str) -> Option<Box<dyn Any + Send>>;
 }
 
 pub struct WorkerHandle<T: AutoThread> {
-    state: Arc<Mutex<T>>,
+    input_tx: Sender<(
+        String,
+        Box<dyn Any + Send>,
+        Option<Sender<Box<dyn Any + Send>>>,
+    )>,
+    stop_tx: Sender<()>,
+    join_handle: JoinHandle<()>,
+    _marker: std::marker::PhantomData<T>,
     running: Arc<AtomicBool>,
-    join_handle: Option<JoinHandle<()>>,
 }
 
 impl<T: AutoThread> WorkerHandle<T> {
-    pub fn new(state: T) -> Self {
+    pub fn start(mut inner: T, should_loop: bool) -> Self {
+        let (input_tx, input_rx): (
+            Sender<(
+                String,
+                Box<dyn Any + Send>,
+                Option<Sender<Box<dyn Any + Send>>>,
+            )>,
+            Receiver<_>,
+        ) = channel();
+        let (stop_tx, stop_rx) = channel();
+
+        let join_handle = thread::spawn(move || {
+            if should_loop {
+                loop {
+                    if let Ok(()) = stop_rx.try_recv() {
+                        break;
+                    }
+
+                    while let Ok((key, value, resp)) = input_rx.try_recv() {
+                        if let Some(resp) = resp {
+                            let result = inner.handle_field_get(&key);
+                            let _ = resp.send(result.unwrap_or_else(|| Box::new(())));
+                        } else {
+                            inner.handle_field_set(&key, value);
+                        }
+                    }
+
+                    inner.run();
+                    thread::sleep(Duration::from_millis(1)); // winzige Pause
+                }
+            } else {
+                while let Ok((key, value, resp)) = input_rx.try_recv() {
+                    if let Some(resp) = resp {
+                        let result = inner.handle_field_get(&key);
+                        let _ = resp.send(result.unwrap_or_else(|| Box::new(())));
+                    } else {
+                        inner.handle_field_set(&key, value);
+                    }
+                }
+
+                inner.run();
+                thread::sleep(Duration::from_millis(1)); // winzige Pause
+            }
+        });
+
         Self {
-            state: Arc::new(Mutex::new(state)),
-            running: Arc::new(AtomicBool::new(false)),
-            join_handle: None,
+            input_tx,
+            stop_tx,
+            join_handle,
+            running: Arc::new(AtomicBool::new(true)),
+            _marker: std::marker::PhantomData,
         }
     }
 
-    /// Startet den Thread im Loop-Modus
-    pub fn start(&mut self) {
-        if self.running.load(Ordering::SeqCst) {
-            return; // Schon gestartet
-        }
-
-        self.running.store(true, Ordering::SeqCst);
-        let running = Arc::clone(&self.running);
-        let state = Arc::clone(&self.state);
-
-        self.join_handle = Some(thread::spawn(move || {
-            while running.load(Ordering::SeqCst) {
-                let mut state = state.lock().unwrap();
-                state.run();
-            }
-        }));
-    }
-
-    /// Führt `run()` genau einmal aus
-    pub fn start_once(&mut self) {
-        if self.running.load(Ordering::SeqCst) {
-            return;
-        }
-
-        self.running.store(true, Ordering::SeqCst);
-        let running = Arc::clone(&self.running);
-        let state = Arc::clone(&self.state);
-
-        self.join_handle = Some(thread::spawn(move || {
-            {
-                let mut state = state.lock().unwrap();
-                state.run();
-            }
-            running.store(false, Ordering::SeqCst);
-        }));
-    }
-
-    /// Beendet den Thread (nur bei `start`)
-    pub fn stop(&mut self) {
-        self.running.store(false, Ordering::SeqCst);
-        if let Some(handle) = self.join_handle.take() {
-            let _ = handle.join();
-        }
+    pub fn stop(self) {
+        let _ = self.stop_tx.send(());
+        let _ = self.join_handle.join();
+        let _ = self.running.store(false, Ordering::SeqCst);
     }
 
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::SeqCst)
     }
 
-    pub fn set_field<U: 'static>(&self, key: &str, value: U) {
-        if let Ok(mut state) = self.state.lock() {
-            let _ = state.set_field_any(key, Box::new(value));
-        }
+    pub fn set_field<U: Any + Send>(&self, key: &str, value: U) {
+        let _ = self.input_tx.send((key.to_string(), Box::new(value), None));
     }
 
-    pub fn get_output<U: 'static>(&self, key: &str) -> Option<U>
-    where
-        U: Clone,
-    {
-        let data = self.state.lock().ok()?;
-        let any = data.get_field_any(key)?;
-        any.downcast_ref::<U>().cloned()
-    }
-
-    pub fn update<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&T) -> R,
-    {
-        let state = self.state.lock().unwrap();
-        f(&*state)
+    pub fn get_field<U: Any + Send>(&self, key: &str) -> Option<U> {
+        let (tx, rx) = channel();
+        let _ = self
+            .input_tx
+            .send((key.to_string(), Box::new(()), Some(tx)));
+        rx.recv().ok()?.downcast::<U>().ok().map(|b| *b)
     }
 }
 
 #[macro_export]
-macro_rules! impl_auto_fields {
-    ($struct_name:ident, { $($field:ident),* $(,)? }) => {
-        impl AutoThread for $struct_name {
-            fn run(&mut self) {
-                // Standardmäßig nichts tun
-            }
-
-            fn set_field(&mut self, key: &str, value: &str) {
-                match key {
-                    $(
-                        stringify!($field) => {
-                            if let Ok(parsed) = value.parse() {
-                                self.$field = parsed;
-                            }
-                        }
-                    )*
-                    _ => {}
+macro_rules! auto_set_field {
+    ($self_:ident, $key:expr, $value:expr, { $($field_name:literal => $field:ident : $ty:ty),* $(,)? }) => {
+        match $key {
+            $(
+                $field_name => {
+                    if let Ok(val) = $value.downcast::<$ty>() {
+                        $self_.$field = *val;
+                        return;
+                    }
                 }
-            }
-
-            fn get_output(&self, key: &str) -> Option<String> {
-                match key {
-                    $(
-                        stringify!($field) => Some(self.$field.to_string()),
-                    )*
-                    _ => None,
-                }
-            }
+            )*
+            _ => {}
         }
     };
+}
+
+#[macro_export]
+macro_rules! auto_get_field {
+    ($self_:ident, $key:expr, { $($field_name:literal => $field:ident : $ty:ty),* $(,)? }) => {{
+        match $key {
+            $(
+                $field_name => {
+                    return Some(Box::new($self_.$field.clone()) as Box<dyn std::any::Any + Send>);
+                }
+            )*
+            _ => return None,
+        }
+    }};
 }
