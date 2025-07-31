@@ -24,6 +24,8 @@ pub enum FofError {
     ModelNotFound(String), // Wenn man versucht ein Modell zu löschen oder zu trainieren welches es nciht gibt. String
     // ist der name des modells
     CommunicationError, // Error während python und rust veruscht haben zu kommunizieren
+    JsonParseError(String),
+    FailedDeletingDirectory(String),
 }
 
 fn main() {

@@ -27,7 +27,7 @@ fn calculate_score(m: &Metrics) -> f64 {
     0.4 * m.map_50_95 + 0.3 * m.map_50 + 0.15 * m.precision + 0.15 * m.recall
 }
 
-fn read_last_metrics(model_name: &String) -> Option<Metrics> {
+fn read_last_metrics(model_name: &str) -> Option<Metrics> {
     let path = format!("runs/detect/{}/results.csv", model_name);
     let file = File::open(&path).ok()?;
     let mut rdr = Reader::from_reader(file);
@@ -38,19 +38,17 @@ fn read_last_metrics(model_name: &String) -> Option<Metrics> {
             last = Some(row);
         }
     }
-    return last;
+    last
 }
 
-pub fn get_rating(model_name: &String) -> Result<f64, FofError> {
+pub fn get_rating(model_name: &str) -> Result<f64, FofError> {
     println!("Searching for metrics of the '{}' model.", model_name);
-    let metrics = read_last_metrics(&model_name);
-
-    if let Some(m) = metrics {
+    if let Some(m) = read_last_metrics(model_name) {
         println!("Success: Found Metrics for the '{}' model.", model_name);
-        return Ok(calculate_score(&m));
+        Ok(calculate_score(&m))
     } else {
         eprintln!("Error: No Metrics found for {}!", model_name);
-        return Err(FofError::NoMetricsFoundForModel(model_name));
+        Err(FofError::NoMetricsFoundForModel(model_name.to_string()))
     }
 }
 
@@ -78,11 +76,11 @@ pub fn get_model_names() -> Result<Vec<String>, FofError> {
                     Ok(md) => md,
                     Err(err) => {
                         eprintln!("⚠️ Failed to get metadata for {:?}: {}", entry.path(), err);
-                        return Err(FofError::Failed(String::from(format!(
+                        return Err(FofError::Failed(format!(
                             "Failed to get metadata for {:?}: {}",
                             entry.path(),
                             err
-                        ))));
+                        )));
                     }
                 };
 
@@ -97,21 +95,20 @@ pub fn get_model_names() -> Result<Vec<String>, FofError> {
                                 "⚠️ Invalid UTF-8 in directory name: {:?}",
                                 entry.file_name()
                             );
-
-                            return Err(FofError::Failed(String::from(format!(
-                                "⚠️ Invalid UTF-8 in directory name: {:?}",
+                            return Err(FofError::Failed(format!(
+                                "Invalid UTF-8 in directory name: {:?}",
                                 entry.file_name()
-                            ))));
+                            )));
                         }
                     }
                 }
             }
             Err(err) => {
                 eprintln!("⚠️ Failed to read a directory entry: {}", err);
-                return Err(FofError::Failed(String::from(format!(
-                    "⚠️ Failed to read a directory entry: {}",
+                return Err(FofError::Failed(format!(
+                    "Failed to read a directory entry: {}",
                     err
-                ))));
+                )));
             }
         }
     }
@@ -119,53 +116,44 @@ pub fn get_model_names() -> Result<Vec<String>, FofError> {
     Ok(model_names)
 }
 
-#[derive(EnumIter, Display, Clone, PartialEq, Eq, Debug)]
+#[derive(Debug)]
 pub enum YoloModel {
-    YOLOv8n,
+    yolov8n,
     YOLOv8s,
-    YOLOv8m, // <-- bestes schnelligkeits / leistungs verhältnis
+    YOLOv8m,
     YOLOv8l,
     YOLOv8x,
 }
 
-pub fn get_avg_confidence(buildings: &Vec<Building>) -> Result<f32, FofError> {
-    println!("Calclulating average confidence..");
-    if buildings.len() == 0 {
-        eprintln!("Error: Es wurden keine Buildings angegeben. Nicht möglich die Confidence zu berechnen.");
+pub fn get_avg_confidence(buildings: &[Building]) -> Result<f32, FofError> {
+    println!("Calculating average confidence..");
+    if buildings.is_empty() {
+        eprintln!("Error: Es wurden keine Buildings angegeben.");
         return Err(FofError::DivisionByZero);
     }
-    let mut sum = 0.0;
 
-    for building in buildings {
-        sum += building.confidence;
-    }
-    return Ok(sum / buildings.len() as f32);
+    let sum: f32 = buildings.iter().map(|b| b.confidence).sum();
+    Ok(sum / buildings.len() as f32)
 }
 
-pub fn create_model(model_name: &String, yolo_model: YoloModel) -> Option<FofError> {
+pub fn create_model(model_name: &str, yolo_model: YoloModel) -> Option<FofError> {
     println!(
         "Creating new model '{}' with the '{:?}' yolo base model.",
         model_name, yolo_model
     );
 
-    if fs::exists(format!("runs/detect/{}", model_name)).unwrap() {
-        eprintln!(
-            "Error: es existiert bereits ein model mit dem namen {}. Breche die Erstellung des Models ab..",
-            model_name
-        );
+    if let Ok(true) = fs::try_exists(format!("runs/detect/{}", model_name)) {
+        eprintln!("Error: Model '{}' already exists. Aborting..", model_name);
         return Some(FofError::ModelAlreadyExists);
     }
-    println!("Parse das YOLO base model..");
+
+    println!("Parsing YOLO base model..");
     let yolo_model_string = match yolo_model {
-        YoloModel::YOLOv8n => String::from("yolov8n.pt"),
-        YoloModel::YOLOv8s => String::from("yolov8s.pt"),
-        YoloModel::YOLOv8m => String::from("yolov8m.pt"),
-        YoloModel::YOLOv8l => String::from("yolov8l.pt"),
-        YoloModel::YOLOv8x => String::from("yolov8x.pt"),
-        _ => {
-            eprintln!("Error: Base model '{:?}' not found!", yolo_model);
-            return Some(FofError::YoloModelNotFound);
-        }
+        YoloModel::yolov8n => "yolov8n.pt",
+        YoloModel::YOLOv8s => "yolov8s.pt",
+        YoloModel::YOLOv8m => "yolov8m.pt",
+        YoloModel::YOLOv8l => "yolov8l.pt",
+        YoloModel::YOLOv8x => "yolov8x.pt",
     };
     println!("Found YOLO base model!");
 
@@ -173,138 +161,135 @@ pub fn create_model(model_name: &String, yolo_model: YoloModel) -> Option<FofErr
         .arg("src/image_data.py")
         .arg("--create-model")
         .arg("--base")
-        .arg(yolo_model_string.to_string())
+        .arg(yolo_model_string)
         .arg("--model-name")
-        .arg(model_name.to_string())
+        .arg(model_name)
         .output()
     {
         Ok(output) if output.status.success() => {
             println!("{}", String::from_utf8_lossy(&output.stdout));
-            println!("Python script is done executing.");
-            return None; // alles hat richtig funktioniert
+            println!("Python script executed.");
+            None
         }
         Ok(output) => {
             eprintln!("Python error: {}", String::from_utf8_lossy(&output.stderr));
-            return Some(FofError::PythonError);
+            Some(FofError::PythonError)
         }
         Err(e) => {
             eprintln!("Failed to start process: {}", e);
-            return Some(FofError::FailedToStartPython);
+            Some(FofError::FailedToStartPython)
         }
     }
 }
 
-pub fn delete_model(model_name: &String) -> Option<FofError> {
+pub fn delete_model(model_name: &str) -> Option<FofError> {
     let path = format!("runs/detect/{}", model_name);
 
     println!("Trying to delete model '{}'..", model_name);
     println!("Searching in: {}", path);
 
-    if fs::exists(&path).unwrap() {
-        println!("Found Model! Deleting it now..");
-        fs::remove_dir_all(&path);
+    if let Ok(true) = fs::try_exists(&path) {
+        println!("Found model. Deleting...");
+        if let Err(e) = fs::remove_dir_all(&path) {
+            eprintln!("Failed to delete {}: {}", path, e);
+            return Some(FofError::FailedDeletingDirectory(path));
+        }
         println!("Successfully deleted {}", path);
-        return None;
+        None
     } else {
-        eprintln!(
-            "Error: Kein Modell mit dem Namen '{}' in 'runs/detect' gefunden. ({})",
-            model_name, &path
-        );
-        return Some(FofError::ModelNotFound(model_name.clone()));
+        eprintln!("Model '{}' not found at '{}'", model_name, path);
+        Some(FofError::ModelNotFound(model_name.to_string()))
     }
 }
 
-pub fn train_model(model_name: &String, epochen: i32) -> Option<FofError> {
+pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
     println!("Training model '{}'", model_name);
-    println!("Searching..");
     let path = format!("runs/detect/{}", model_name);
-    if !fs::exists(&path).unwrap() {
-        eprintln!(
-            "Error: Es existiert kein model mit dem namen {}. ({} nicht gefunden)",
-            model_name, path
-        );
-        return Some(FofError::ModelNotFound(model_name.clone()));
+
+    if let Ok(false) = fs::try_exists(&path) {
+        eprintln!("Error: Model '{}' not found ({}).", model_name, path);
+        return Some(FofError::ModelNotFound(model_name.to_string()));
     }
+
     println!(
-        "Found model '{}' in {}. Starting to train it for {} epochs.",
+        "Found model '{}' in '{}'. Starting to train for {} epochs.",
         model_name, path, epochen
     );
+
     match Command::new("python3")
         .arg("src/image_data.py")
         .arg("--train")
         .arg("--model-name")
-        .arg(model_name.to_string())
+        .arg(model_name)
         .arg("--epochs")
         .arg(epochen.to_string())
         .output()
     {
         Ok(output) if output.status.success() => {
             println!("{}", String::from_utf8_lossy(&output.stdout));
-            println!("Python script is done executing.");
-            return None;
+            println!("Training complete.");
+            None
         }
         Ok(output) => {
             eprintln!("Python Error: {}", String::from_utf8_lossy(&output.stderr));
-            return Some(FofError::PythonError);
+            Some(FofError::PythonError)
         }
         Err(e) => {
-            eprintln!("Failed to start process: {}", e);
-            return Some(FofError::FailedToStartPython);
+            eprintln!("Failed to start training process: {}", e);
+            Some(FofError::FailedToStartPython)
         }
     }
 }
 
 fn remove_communication() {
-    if fs::exists("Communication").unwrap() {
-        fs::remove_dir_all("Communication");
-        println!("Successfully removed Communication directory.")
+    if let Ok(true) = fs::try_exists("Communication") {
+        if let Err(e) = fs::remove_dir_all("Communication") {
+            eprintln!("Failed to remove Communication directory: {}", e);
+        } else {
+            println!("Successfully removed Communication directory.");
+        }
     }
 }
-pub fn get_prediction<P>(
-    model_name: &String,
-    screeenshot_path: &P,
-) -> Result<Vec<Building>, FofError>
+
+pub fn get_prediction<P>(model_name: &str, screenshot_path: &P) -> Result<Vec<Building>, FofError>
 where
     P: AsRef<Path>,
     P: Debug,
 {
     println!(
         "Getting prediction from model '{}' for {:?}.",
-        model_name, screeenshot_path
+        model_name, screenshot_path
     );
 
     remove_communication();
 
     println!("Creating temporary communication directory..");
-    fs::create_dir("Communication").expect("Failed to create Communication dir.");
-
-    let target = Path::new("Communication/screenshot.png");
-    let res = fs::copy(screeenshot_path, target);
-
-    match res {
-        Ok(_) => {
-            println!("Screenshot wurde erfolgreich nach 'Communication/screenshot.png' kopiert!")
-        }
-        Err(e) => {
-            eprintln!(
-                "Error: {}  | Tried to copy {:?} to {:?}.",
-                &e, &screeenshot_path, target
-            );
-            remove_communication();
-            return Err(FofError::CommunicationError);
-        }
+    if let Err(e) = fs::create_dir("Communication") {
+        eprintln!("Failed to create Communication dir: {}", e);
+        return Err(FofError::CommunicationError);
     }
 
-    match Command::new("python3")
+    let target = Path::new("Communication/screenshot.png");
+    if let Err(e) = fs::copy(screenshot_path, target) {
+        eprintln!(
+            "Error copying screenshot: {} | {:?} → {:?}",
+            e, screenshot_path, target
+        );
+        remove_communication();
+        return Err(FofError::CommunicationError);
+    }
+
+    let output = Command::new("python3")
         .arg("src/image_data.py")
         .arg("--predict")
         .arg("--model-name")
-        .arg(model_name.to_string())
-        .output()
-    {
+        .arg(model_name)
+        .output();
+
+    match output {
         Ok(output) if output.status.success() => {
             println!("{}", String::from_utf8_lossy(&output.stdout));
-            println!("Python script is done executing.");
+            println!("Prediction complete.");
         }
         Ok(output) => {
             eprintln!("Python Error: {}", String::from_utf8_lossy(&output.stderr));
@@ -312,29 +297,43 @@ where
             return Err(FofError::PythonError);
         }
         Err(e) => {
-            eprintln!("Failed to start process: {}", e);
+            eprintln!("Failed to start prediction process: {}", e);
             remove_communication();
             return Err(FofError::FailedToStartPython);
         }
     }
 
-    if !fs::exists("Communication/data.json").unwrap() {
-        eprintln!("Error: Communication/data.json nicht gefunden.");
+    if let Ok(false) = fs::try_exists("Communication/data.json") {
+        eprintln!("Error: data.json not found.");
         remove_communication();
-
-        return Err(FofError::FailedReadingFile(String::from(
-            "Communication/data.json",
-        )));
+        return Err(FofError::FailedReadingFile(
+            "Communication/data.json".to_string(),
+        ));
     }
-    let file = File::open("Communication/data.json").expect("Konnte data.json nicht öffnen");
-    println!("Reading data.json..");
 
+    let file = match File::open("Communication/data.json") {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("Could not open data.json: {}", e);
+            remove_communication();
+            return Err(FofError::FailedReadingFile(
+                "Communication/data.json".to_string(),
+            ));
+        }
+    };
+
+    println!("Reading data.json..");
     let reader = BufReader::new(file);
 
-    let buildings: Vec<Building> =
-        serde_json::from_reader(reader).expect("Error while trying to read from data.json.");
+    let buildings: Vec<Building> = match serde_json::from_reader(reader) {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("JSON parse error: {}", e);
+            remove_communication();
+            return Err(FofError::JsonParseError(e.to_string()));
+        }
+    };
 
     remove_communication();
-
-    return Ok(buildings);
+    Ok(buildings)
 }
