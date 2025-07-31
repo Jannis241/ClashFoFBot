@@ -1,5 +1,3 @@
-use std::vec;
-
 use crate::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -10,8 +8,65 @@ pub struct Building {
     pub bounding_box: (f32, f32, f32, f32),
 }
 
+#[derive(Debug, Deserialize)]
+struct Metrics {
+    #[serde(rename = "metrics/precision(B)")]
+    precision: f64,
+
+    #[serde(rename = "metrics/recall(B)")]
+    recall: f64,
+
+    #[serde(rename = "metrics/mAP50(B)")]
+    map_50: f64,
+
+    #[serde(rename = "metrics/mAP50-95(B)")]
+    map_50_95: f64,
+}
+
+fn calculate_score(m: &Metrics) -> f64 {
+    0.4 * m.map_50_95 + 0.3 * m.map_50 + 0.15 * m.precision + 0.15 * m.recall
+}
+
+fn read_last_metrics(model_name: &String) -> Option<Metrics> {
+    let mut path = format!("runs/detect/{}/results.csv", model_name);
+    println!("Getting metrics from {}", path);
+    let file = File::open(&path).ok()?;
+    let mut rdr = Reader::from_reader(file);
+    let mut last: Option<Metrics> = None;
+    println!("Reader: {:?}", rdr);
+
+    for result in rdr.deserialize() {
+        println!("Result from rdr deserialze: {:?}", &result);
+        if let Ok(row) = result {
+            last = Some(row);
+        }
+    }
+
+    println!("last metrics: {:?}", last);
+
+    last
+}
+
+pub fn get_rating(model_name: String) -> f64 {
+    let metrics = read_last_metrics(&model_name);
+    if let Some(m) = metrics {
+        return calculate_score(&m);
+    } else {
+        eprintln!("Error: Keine Metrics für {} gefunden!", model_name);
+        return 0.0;
+    }
+}
+
+pub fn get_model_names() -> Vec<String> {
+    vec![]
+}
+
 pub enum YoloModel {
     yolov8n,
+    YOLOv8s,
+    YOLOv8m, // <-- bestes schnelligkeits / leistungs verhältnis
+    YOLOv8l,
+    YOLOv8x,
 }
 
 pub fn get_avg_confidence(buildings: &Vec<Building>) -> f32 {
@@ -27,15 +82,20 @@ pub fn create_model(model_name: String, yolo_model: YoloModel) -> bool {
     println!("Creating model");
     if fs::exists(format!("runs/detect/{}", model_name)).unwrap() {
         eprintln!(
-            "Es existiert bereits ein model mit dem namen {}",
+            "Es existiert bereits ein model mit dem namen {}. Breche Erstellung ab.",
             model_name
         );
         return false;
     }
+    println!("Parse yolo base model..");
     let yolo_model_string = match yolo_model {
         YoloModel::yolov8n => String::from("yolov8n.pt"),
+        YoloModel::YOLOv8s => String::from("yolov8s.pt"),
+        YoloModel::YOLOv8m => String::from("yolov8m.pt"),
+        YoloModel::YOLOv8l => String::from("yolov8l.pt"),
+        YoloModel::YOLOv8x => String::from("yolov8x.pt"),
         _ => {
-            eprintln!("Error while parsing yolo model in image data wrapper.rs");
+            eprintln!("Error while parsing yolo model in image data wrapper.rs. Model not found!");
             return false;
         }
     };
@@ -150,16 +210,25 @@ pub fn get_buildings(model_name: String, screeenshot_path: &Path) -> (Vec<Buildi
         Ok(output) => {
             eprintln!("Python error:");
             eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            if fs::exists("Communication").unwrap() {
+                fs::remove_dir_all("Communication");
+            }
             return (vec![], false);
         }
         Err(e) => {
             eprintln!("Failed to start process: {}", e);
+            if fs::exists("Communication").unwrap() {
+                fs::remove_dir_all("Communication");
+            }
             return (vec![], false);
         }
     }
 
     if !fs::exists("Communication/data.json").unwrap() {
         eprintln!("data.json nicht gefunden.");
+        if fs::exists("Communication").unwrap() {
+            fs::remove_dir_all("Communication");
+        }
         return (vec![], false);
     }
     let file = File::open("Communication/data.json").expect("Konnte data.json nicht öffnen");

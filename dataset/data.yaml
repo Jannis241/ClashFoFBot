@@ -2,6 +2,6 @@ path: dataset
 train: images/train
 val: images/val
 names:
-  0: kanone
-  1: luftabwehr
+  0: nike
+  1: adidas
 
