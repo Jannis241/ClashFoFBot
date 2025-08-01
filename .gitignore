@@ -35,7 +35,20 @@ target
 # /Communication
 
 
+.DS_Store
+Thumbs.db
 
-**/.DS_Store
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.env
 
+.vscode/
+.idea/
+
+*.log
+*.bak
+*.tmp
+*.swp
 
