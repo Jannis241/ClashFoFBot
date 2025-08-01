@@ -57,7 +57,8 @@ def write_prediction_to_json(model_name, image_path):
 
     model_path = f"runs/detect/{model_name}/weights/best.pt"
 
-    model = YOLO(model_path)
+    # model = YOLO(model_path)
+    model = YOLO("yolov8n")
 
     results = model.predict(source=image_path)[0]
 

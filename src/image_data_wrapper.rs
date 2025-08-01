@@ -313,16 +313,15 @@ pub enum YoloModel {
     YOLOv8x,
 }
 
-pub fn get_avg_confidence(buildings: &[Building]) -> Result<f32, FofError> {
+pub fn get_avg_confidence(buildings: &[Building]) -> f32 {
     println!("Calculating average confidence..");
     if buildings.is_empty() {
         eprintln!("Error: Es wurden keine Buildings angegeben um die average confidence zu berechnen. Returne 0 für avg confidence.");
-        return Ok(0.0);
-        // return Err(FofError::DivisionByZero);
+        return 0.0;
     }
 
     let sum: f32 = buildings.iter().map(|b| b.confidence).sum();
-    Ok(sum / buildings.len() as f32)
+    sum / buildings.len() as f32
 }
 
 pub fn create_model(
@@ -596,6 +595,8 @@ where
 
     let path = format!("runs/detect/{}", model_name);
 
+    println!("Model path: {}", &path);
+
     if let Ok(false) = fs::exists(&screenshot_path) {
         eprintln!("Error: No screenshot found in {:?}.", screenshot_path);
         return Err(FofError::FailedReadingFile(screenshot_path.to_string()));
@@ -633,6 +634,9 @@ where
         ));
     }
 
+    println!("Pre python checks alle valid");
+    println!("Starting python script to get prediction from the model..");
+
     let output = Command::new("python3")
         .arg("src/image_data.py")
         .arg("--predict")
@@ -643,7 +647,7 @@ where
     match output {
         Ok(output) if output.status.success() => {
             println!("{}", String::from_utf8_lossy(&output.stdout));
-            println!("Prediction complete.");
+            println!("Prediction complete. Keine Probleme bei python.");
         }
         Ok(output) => {
             eprintln!("Logs: {}", String::from_utf8_lossy(&output.stdout));
@@ -666,6 +670,8 @@ where
         ));
     }
 
+    println!("data.json gefunden.");
+
     let file = match File::open("Communication/data.json") {
         Ok(f) => f,
         Err(e) => {
@@ -680,8 +686,13 @@ where
     println!("Reading data.json..");
     let reader = BufReader::new(file);
 
+    println!("json reader: {:?}", reader);
+
     let buildings: Vec<Building> = match serde_json::from_reader(reader) {
-        Ok(data) => data,
+        Ok(data) => {
+            println!("Got json data: {:?}", &data);
+            data
+        }
         Err(e) => {
             eprintln!("JSON parse error: {}", e);
             remove_communication();
@@ -690,5 +701,6 @@ where
     };
 
     remove_communication();
+    println!("Sucessfully got prediction: {:?}", &buildings);
     Ok(buildings)
 }
