@@ -180,6 +180,7 @@ fn read_last_metrics(model_name: &str) -> Option<Metrics> {
             last = Some(row);
         }
     }
+    println!("Found metrics: {:?} in {}", last, path);
     last
 }
 
