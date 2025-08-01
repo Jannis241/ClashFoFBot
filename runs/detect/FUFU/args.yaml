@@ -1,8 +1,8 @@
 task: detect
 mode: train
-model: runs/detect/FUFU/weights/best.pt
-data: dataset_level/data.yaml
-epochs: 1
+model: runs/detect/fufu/weights/best.pt
+data: dataset_buildings/data.yaml
+epochs: 100
 time: null
 patience: 100
 batch: 16
@@ -10,10 +10,10 @@ imgsz: 640
 save: true
 save_period: -1
 cache: false
-device: null
+device: cpu
 workers: 8
 project: null
-name: FUFU
+name: fufu
 exist_ok: true
 pretrained: true
 optimizer: auto
@@ -102,4 +102,4 @@ auto_augment: randaugment
 erasing: 0.4
 cfg: null
 tracker: botsort.yaml
-save_dir: /home/jesko/programmieren/ClashFoFBot/runs/detect/FUFU
+save_dir: runs/detect/fufu

@@ -1,7 +1,10 @@
 train: images/train
 val: images/val
 names:
-  1: fof
+  4: n
+  6: dfdfsdfdffd
+  5: ni
   3: nik
-  0: nike
   2: sdfsdfsf
+  0: nike
+  1: fof

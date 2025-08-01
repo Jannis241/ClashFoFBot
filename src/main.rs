@@ -28,6 +28,7 @@ pub enum FofError {
     MissingField(String),
     UnsupportedDataset(String),
     IoError(String),
+    NoStatsFound(String), // model name
 }
 
 impl From<io::Error> for FofError {
@@ -37,6 +38,6 @@ impl From<io::Error> for FofError {
 }
 
 fn main() {
-    ui::start_ui();
-    // debug::run_tests();
+    // ui::start_ui();
+    debug::run_tests();
 }

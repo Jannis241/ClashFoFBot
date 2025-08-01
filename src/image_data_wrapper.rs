@@ -1,4 +1,7 @@
+use eframe::epaint::stats;
+use image::imageops::FilterType::Triangle;
 use strum_macros::AsRefStr;
+use time::OffsetDateTime;
 
 use crate::prelude::*;
 
@@ -37,6 +40,86 @@ impl Model {
         }
     }
 }
+
+pub struct TrainingStats {
+    pub trained_epochen: i32,
+    pub start_rating: f64,
+    pub avg_time_per_epoche: OffsetDateTime,
+    pub avg_improvement_per_epoche: f64,
+    pub avg_improvement_per_hour: f64,
+    pub current_rating: f64,
+    pub rating_improvement: f64,
+    pub start_time: OffsetDateTime,
+    pub current_time: OffsetDateTime,
+    pub trainings_dauer: OffsetDateTime,
+}
+
+pub struct ModelStats {
+    pub num_of_finished_trainings: i32,
+    pub overall_training_time: OffsetDateTime,
+    pub num_of_trained_epochen: i32,
+    pub current_rating: i32,
+    pub avg_rating_improvement_per_trainign: f64,
+    pub avg_rating_improvement_per_hour: f64,
+    pub avg_rating_improvement_per_epoche: f64,
+    pub avg_time_per_epoche: OffsetDateTime,
+}
+
+impl ModelStats {
+    fn new(
+        num_of_finished_trainings: i32,
+        overall_training_time: OffsetDateTime,
+        num_of_trained_epochen: i32,
+        current_rating: i32,
+        avg_rating_improvement_per_trainign: f64,
+        avg_rating_improvement_per_hour: f64,
+        avg_rating_improvement_per_epoche: f64,
+        avg_time_per_epoche: OffsetDateTime,
+    ) -> Self {
+        Self {
+            num_of_finished_trainings,
+            overall_training_time,
+            num_of_trained_epochen,
+            current_rating,
+            avg_rating_improvement_per_trainign,
+            avg_rating_improvement_per_hour,
+            avg_rating_improvement_per_epoche,
+            avg_time_per_epoche,
+        }
+    }
+}
+
+impl TrainingStats {
+    fn new(
+        trained_epochen: i32,
+        start_rating: f64,
+        avg_time_per_epoche: OffsetDateTime,
+        avg_improvement_per_epoche: f64,
+        avg_improvement_per_hour: f64,
+        current_rating: f64,
+        rating_improvement: f64,
+        start_time: OffsetDateTime,
+        current_time: OffsetDateTime,
+        trainings_dauer: OffsetDateTime,
+    ) -> Self {
+        Self {
+            trained_epochen,
+            start_rating,
+            avg_time_per_epoche,
+            avg_improvement_per_epoche,
+            avg_improvement_per_hour,
+            current_rating,
+            rating_improvement,
+            start_time,
+            current_time,
+            trainings_dauer,
+        }
+    }
+}
+
+// pub fn get_model_stats(model_name: &str) -> ModelStats {}
+//
+// pub fn get_training_stats(model_name: &str) -> TrainingStats {}
 
 // funktioniert nicht weil man das immer erst von git runter laden muss und dann in den path packen
 pub fn read_number(image_path: &String) -> Result<i32, FofError> {
@@ -281,6 +364,21 @@ pub fn create_model(
         Ok(output) if output.status.success() => {
             println!("{}", String::from_utf8_lossy(&output.stdout));
             println!("Python script executed.");
+
+            let stats_dir = format!("Stats/{}", model_name);
+            if let Ok(true) = fs::exists(&stats_dir) {
+                eprintln!("Error: Tried to initialise Stats directory in '{}' for model '{}' but it already exists. The model probably didnt get removed correctly. Aborting..", stats_dir, model_name);
+                return Some(FofError::Failed(format!("Es wurden bereits initialisierte Stats für das Model '{}' gefunden. Kann keine neuen erstellen. Ein vorheriges Model mit diesem namen wurde wahrscheinlich nicht korrekt entfernt", model_name)));
+            }
+            if let Err(e) = fs::create_dir(&stats_dir) {
+                eprintln!("Error while trying to create stats dir.");
+                return Some(FofError::Failed(e.to_string()));
+            }
+            println!(
+                "Sucessfully initialised Stats directory for model '{}' in {}.",
+                model_name, &stats_dir
+            );
+
             None
         }
         Ok(output) => {
@@ -307,6 +405,27 @@ pub fn delete_model(model_name: &str) -> Option<FofError> {
             return Some(FofError::FailedDeletingDirectory(path));
         }
         println!("Successfully deleted {}", path);
+
+        let stats_dir = format!("Stats/{}", model_name);
+        if let Ok(false) = fs::exists(&stats_dir) {
+            eprintln!(
+                "No stats found for model '{}' to delete. Still trying to continue..",
+                model_name
+            );
+        } else {
+            let r = fs::remove_dir_all(stats_dir);
+            match r {
+                Ok(o) => println!("Successfully removed Stats for model '{}'.", model_name),
+                Err(e) => {
+                    println!(
+                        "Error while trying to delete stats dir for model '{}': {}",
+                        model_name, e
+                    );
+
+                    return Some(FofError::Failed(e.to_string()));
+                }
+            }
+        }
         None
     } else {
         eprintln!("Model '{}' not found at '{}'", model_name, path);
@@ -349,6 +468,25 @@ pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
         model_name, path, epochen
     );
 
+    println!("Searching for stats..");
+
+    let stats_path = format!("Stats/{}", model_name);
+
+    if let Ok(false) = fs::exists(&stats_path) {
+        eprintln!(
+            "Error: Keine initialisierten Stats für '{}' in {} gefunden . (Model wurde wahrscheinlich nicht korrekt erstellt.)",
+            model_name,
+            stats_path,
+        );
+        return Some(FofError::NoStatsFound(model_name.to_string()));
+    }
+
+    println!("Found Stats for model '{}' in {}", model_name, stats_path);
+
+    let start_time = time::OffsetDateTime::now_utc();
+
+    let start_rating = get_rating(model_name);
+
     match Command::new("python3")
         .arg("src/image_data.py")
         .arg("--train")
@@ -363,6 +501,60 @@ pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
         Ok(output) if output.status.success() => {
             println!("{}", String::from_utf8_lossy(&output.stdout));
             println!("Training complete.");
+
+            let end_time = time::OffsetDateTime::now_utc();
+
+            let training_time = end_time - start_time;
+
+            let num_of_epochs = epochen;
+            let end_rating = get_rating(model_name);
+
+            // training muss in stats hinzugefügt werdne
+            //
+            //
+            //
+            //
+            //
+
+            println!("\n📊 Training Stats:");
+            println!("─────────────────────────────");
+
+            println!("🔹 Startzeit         : {}", start_time);
+            println!("🔹 Endzeit           : {}", end_time);
+
+            let seconds = training_time.whole_seconds();
+            let hours = seconds / 3600;
+            let minutes = (seconds % 3600) / 60;
+            let secs = seconds % 60;
+
+            println!(
+                "🕒 Trainingsdauer    : {:02}h {:02}m {:02}s",
+                hours, minutes, secs
+            );
+
+            println!(
+                "📈 Start-Rating      : {:.2}",
+                start_rating.clone().unwrap()
+            );
+            println!("📉 End-Rating        : {:.2}", end_rating.clone().unwrap());
+
+            let rating_improvement = end_rating.clone().unwrap() - start_rating.clone().unwrap();
+            let avg_rating_per_epoche = rating_improvement / epochen as f64;
+            let training_hours = training_time.whole_seconds() as f64 / 3600.0;
+            let avg_rating_per_hour = if training_hours > 0.0 {
+                rating_improvement / training_hours
+            } else {
+                0.0
+            };
+
+            println!("➕ Verbesserung       : {:.2}", rating_improvement);
+            println!("📊 Ø Rating/Epoche   : {:.4}", avg_rating_per_epoche);
+            println!("⚡ Ø Rating/Stunde   : {:.4}", avg_rating_per_hour);
+            println!("🔁 Epochen           : {}", epochen);
+            println!("─────────────────────────────");
+
+            // epochen, start
+
             None
         }
         Ok(output) => {
