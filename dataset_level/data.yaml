@@ -1,3 +1,5 @@
 train: images/train
 val: images/val
 names:
+  0: '17'
+  1: '15'
