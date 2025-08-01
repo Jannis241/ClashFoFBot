@@ -1034,11 +1034,25 @@ impl ScreenshotApp {
                 }
             }
         }
+
+        for event in &ctx.input(|i| i.events.clone()) {
+            match event {
+                egui::Event::Key {
+                    key, pressed: true, ..
+                } => match key {
+                    egui::Key::Escape => {
+                        self.labeled_rects.pop();
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
     }
 
     fn save_labeld_rects(&mut self, final_size: egui::Vec2) {
         if let Some(image_path) = self.labeling_que.clone().last() {
-            self.create_error("Speichere YOLO-Labels...", MessageType::Warning);
+            self.create_error("Speichere YOLO-Labels...", MessageType::Success);
 
             use regex::Regex;
             use std::collections::HashMap;
@@ -1226,15 +1240,17 @@ impl ScreenshotApp {
         // Rechtecke zeichnen
         let painter = ui.painter();
 
-        for lr in &self.labeled_rects {
+        for (idx, lr) in self.labeled_rects.iter().enumerate() {
             painter.rect_stroke(lr.rect, 0.0, (2.0, egui::Color32::RED), StrokeKind::Middle);
-            painter.text(
-                lr.rect.left_top(),
-                egui::Align2::LEFT_TOP,
-                &lr.label,
-                egui::TextStyle::Body.resolve(&ctx.style()),
-                egui::Color32::RED,
-            );
+            if idx + 1 == self.labeled_rects.len() {
+                painter.text(
+                    lr.rect.left_top(),
+                    egui::Align2::LEFT_TOP,
+                    &lr.label,
+                    egui::TextStyle::Body.resolve(&ctx.style()),
+                    egui::Color32::RED,
+                );
+            }
         }
 
         if let (Some(start), Some(current)) = (self.current_rect_start, self.current_rect_end) {
@@ -1286,9 +1302,22 @@ impl ScreenshotApp {
         let is_running = !self.labeling_que.is_empty();
 
         let (button_text, button_color) = if is_running {
-            ("Stop Session", Color32::from_rgb(200, 50, 50)) // rot
+            (
+                format!(
+                    "Stop Session({}/{} Bildern Gelabelt)",
+                    self.selected_images.len() - self.labeling_que.len(),
+                    self.selected_images.len()
+                ),
+                Color32::from_rgb(200, 50, 50),
+            ) // rot
         } else {
-            ("Start Session", Color32::from_rgb(0, 200, 100)) // grün
+            (
+                format!(
+                    "Start Session ({} ausgewählte Bilder)",
+                    self.selected_images.len()
+                ),
+                Color32::from_rgb(0, 200, 100),
+            ) // grün
         };
 
         if ui
@@ -1301,10 +1330,11 @@ impl ScreenshotApp {
         {
             if is_running {
                 self.labeling_que.clear();
+                self.selected_images.clear();
+                self.labeled_rects.clear();
                 self.create_error("Session beendet", MessageType::Success);
             } else {
                 self.labeling_que = self.selected_images.iter().cloned().collect();
-                self.selected_images.clear();
                 self.create_error("Session gestartet", MessageType::Success);
             }
         }
