@@ -53,7 +53,7 @@ use std::any::Any;
 use std::i128;
 use std::sync::{Arc, Mutex};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum TrainStatus {
     Idle,
     Running,
@@ -79,6 +79,7 @@ impl AutoThread for TrainThread {
 
             thread::spawn(move || {
                 let result = image_data_wrapper::train_model(&model, 1);
+                dbg!(&result);
                 *status_ref.lock().unwrap() = TrainStatus::Done(result);
             });
         }
@@ -1547,7 +1548,7 @@ impl eframe::App for ScreenshotApp {
             let mut errors = vec![];
 
             for thrd in self.train_threads.iter() {
-                if let Some(winterarc) = thrd.poll_field::<Arc<Mutex<TrainStatus>>>("last_msg") {
+                if let Some(winterarc) = thrd.poll_field::<Arc<Mutex<TrainStatus>>>("status") {
                     let trainingstatus = winterarc.lock().unwrap().clone();
                     if let TrainStatus::Done(Some(e)) = trainingstatus {
                         errors.push(e);
