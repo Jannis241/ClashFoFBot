@@ -38,6 +38,5 @@ impl From<io::Error> for FofError {
 }
 
 fn main() {
-    // ui::start_ui();
-    debug::run_tests();
+    ui::start_ui();
 }
