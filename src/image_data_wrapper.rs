@@ -191,8 +191,11 @@ fn get_rating(model_name: &str) -> Result<f64, FofError> {
         println!("Success: Found Metrics for the '{}' model.", model_name);
         Ok(calculate_score(&m))
     } else {
-        eprintln!("Error: No Metrics found for {}!", model_name);
-        Err(FofError::NoMetricsFoundForModel(model_name.to_string()))
+        eprintln!(
+            "Warning: No Metrics found for {}! Sill trying to continue..",
+            model_name
+        );
+        return Ok(0.0);
     }
 }
 
