@@ -192,10 +192,12 @@ fn get_rating(model_name: &str) -> Result<f64, FofError> {
         Ok(calculate_score(&m))
     } else {
         eprintln!(
-            "Warning: No Metrics found for {}! Sill trying to continue..",
+            "Error: No Metrics found for {}! (Model wurde wahrscheinlich nicht korrekt erstellt -> evtl. python error beim erstellen -> results.csv fehlt.)",
             model_name
         );
-        return Ok(0.0);
+        return Err(FofError::NoMetricsFoundForModel(
+            model_name.clone().to_string(),
+        ));
     }
 }
 
@@ -315,8 +317,9 @@ pub enum YoloModel {
 pub fn get_avg_confidence(buildings: &[Building]) -> Result<f32, FofError> {
     println!("Calculating average confidence..");
     if buildings.is_empty() {
-        eprintln!("Error: Es wurden keine Buildings angegeben.");
-        return Err(FofError::DivisionByZero);
+        eprintln!("Error: Es wurden keine Buildings angegeben um die average confidence zu berechnen. Returne 0 für avg confidence.");
+        return Ok(0.0);
+        // return Err(FofError::DivisionByZero);
     }
 
     let sum: f32 = buildings.iter().map(|b| b.confidence).sum();
