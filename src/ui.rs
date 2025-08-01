@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 use crate::{prelude::*, threading::WorkerHandle};
 
 pub fn start_ui() {
