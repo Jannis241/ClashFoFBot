@@ -15,15 +15,8 @@ Model tab:
     bei model trainieren:
         - wenn es nicht trainiert wird soll das model grau sein und nicht rot
 
-label tab:
-    - auto completion auf leertaste machen
-    - mit enter bestätigen
-    - gelbe nachricht grün machen (sonst denkt man irgendwas hat nciht funktioniert)
-    - vielleicht noch oben anzeigen bei welchem bild man grade ist, zb name des bildes und dann 2/5, damit man weiß wie viele label es noch sind
-        - also dann ist oben dieser stop session button und dann daneben so "image.png" "3/5" sowas halt
 
 
 
-machen dass man auch jpg und andere bild formate labeln udn auswählen kann
 
 

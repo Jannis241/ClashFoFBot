@@ -948,6 +948,13 @@ impl ScreenshotApp {
         self.model_testen(ui, ctx);
     }
 
+    fn extract_numbers(s: &str) -> Vec<i32> {
+        let re = regex::Regex::new(r"\d+").unwrap(); // matches sequences of digits
+        re.find_iter(s)
+            .filter_map(|mat| mat.as_str().parse::<i32>().ok())
+            .collect()
+    }
+
     fn handel_labeling_cursor(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
         // Cursor-Position innerhalb des Bildes ermitteln
         let cursor_pos = ui.ctx().input(|i| i.pointer.hover_pos());
@@ -973,6 +980,25 @@ impl ScreenshotApp {
             }
             // Loslassen
             if pointer_released {
+                if let Some(r) = self.labeled_rects.last() {
+                    let lvls = ScreenshotApp::extract_numbers(&r.label);
+
+                    dbg!(&lvls);
+
+                    if lvls.len() > 1 {
+                        self.create_error(
+                            "Mehr als ein Level in Label Gefunden",
+                            MessageType::Warning,
+                        );
+                    } else if lvls.is_empty() {
+                        self.create_error("Kein Level in Label Gefunden", MessageType::Warning);
+                    } else if lvls[0] < 1 || lvls[0] > 17 {
+                        self.create_error(
+                            "Level in Label nicht zwischen 1 und 17",
+                            MessageType::Warning,
+                        );
+                    }
+                }
                 if let (Some(start), Some(end)) = (self.current_rect_start, self.current_rect_end) {
                     let rect = egui::Rect::from_two_pos(start, end).expand(2.0);
                     self.labeled_rects.push(LabeledRect {
@@ -987,6 +1013,11 @@ impl ScreenshotApp {
         }
     }
     fn add_lable_to_yaml(&mut self, ctx: &egui::Context) {
+        let mut parts: Vec<String> = self
+            .labeled_rects
+            .iter()
+            .map(|r| r.label.chars().take_while(|c| !c.is_numeric()).collect())
+            .collect();
         if self.current_rect_start.is_none() {
             if let Some(r) = self.labeled_rects.last_mut() {
                 // Lade bekannte Klassen aus data.yaml
@@ -998,17 +1029,39 @@ impl ScreenshotApp {
                     names: std::collections::HashMap<usize, String>,
                 }
 
-                let class_names: Vec<String> =
+                let mut class_names: Vec<String> =
                     if let Ok(data) = serde_yaml::from_str::<DataYaml>(&yaml_content) {
                         data.names.values().cloned().collect()
                     } else {
                         vec![]
                     };
 
+                class_names.append(&mut parts);
+
+                let mut seen = std::collections::HashSet::new();
+                let class_names: Vec<String> = class_names
+                    .into_iter()
+                    .filter(|s| seen.insert(s.clone()))
+                    .collect();
+
+                //dbg!(&class_names);
+
                 for event in &ctx.input(|i| i.events.clone()) {
                     match event {
                         egui::Event::Text(text) => {
-                            r.label.push_str(text);
+                            if text == " " {
+                                let trimmed = r.label.trim();
+                                let matches: Vec<&String> = class_names
+                                    .iter()
+                                    .filter(|name| name.starts_with(trimmed) && *name != trimmed)
+                                    .collect();
+
+                                if matches.len() == 1 {
+                                    r.label = matches[0].clone();
+                                }
+                            } else {
+                                r.label.push_str(text);
+                            }
                         }
                         egui::Event::Key {
                             key, pressed: true, ..
@@ -1020,7 +1073,7 @@ impl ScreenshotApp {
                                 let trimmed = r.label.trim();
                                 let matches: Vec<&String> = class_names
                                     .iter()
-                                    .filter(|name| name.starts_with(trimmed))
+                                    .filter(|name| name.starts_with(trimmed) && *name != trimmed)
                                     .collect();
 
                                 if matches.len() == 1 {
