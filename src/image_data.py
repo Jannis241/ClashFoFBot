@@ -22,6 +22,7 @@ def read_number(path):
 
 
 def write_data(data):
+    print("Hallo hier ist python. Ich schreibe jetzt diese data in data.json: ", data)
     file_path = "Communication/data.json"
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, 'w', encoding='utf-8') as f:
@@ -57,8 +58,8 @@ def write_prediction_to_json(model_name, image_path):
 
     model_path = f"runs/detect/{model_name}/weights/best.pt"
 
-    # model = YOLO(model_path)
-    model = YOLO("yolov8n")
+    model = YOLO(model_path)
+    # model = YOLO("yolov8n")
 
     results = model.predict(source=image_path)[0]
 
@@ -79,6 +80,7 @@ def write_prediction_to_json(model_name, image_path):
             "confidence": conf,
             "bounding_box": (xyxy[0], xyxy[1], xyxy[2], xyxy[3])
         })
+    print("Output in python nach dem parsen des results von dem model. Das hier sollte jetzt in data.json geschrieben werden: ", output)
 
     write_data(output)
 
