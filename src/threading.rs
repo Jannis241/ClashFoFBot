@@ -142,13 +142,6 @@ impl<T: AutoThread> WorkerHandle<T> {
     }
 
     pub fn poll_field<U: Any + Send + Clone>(&self, key: &str) -> Option<U> {
-        // 1. Cache check
-        if let Some(cached_value) = self.cache.lock().unwrap().get(key) {
-            if let Some(value) = cached_value.as_ref().as_any().downcast_ref::<U>() {
-                return Some(value.clone());
-            }
-        }
-
         // 2. Pending check
         let mut pending = self.pending_rx.lock().unwrap();
         if let Some(rx) = pending.get(key) {
@@ -183,6 +176,13 @@ impl<T: AutoThread> WorkerHandle<T> {
             .input_tx
             .send((key.to_string(), Box::new(()), Some(tx)));
         pending.insert(key.to_string(), rx);
+
+        // 1. Cache check
+        if let Some(cached_value) = self.cache.lock().unwrap().get(key) {
+            if let Some(value) = cached_value.as_ref().as_any().downcast_ref::<U>() {
+                return Some(value.clone());
+            }
+        }
 
         None
     }

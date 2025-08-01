@@ -50,6 +50,7 @@ enum Tab {
 
 use crate::threading::*;
 use std::any::Any;
+use std::i128;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -118,8 +119,10 @@ struct GetBuildingsThread {
 impl threading::AutoThread for GetBuildingsThread {
     fn run(&mut self) {
         if self.should_get_prediction {
+            dbg!(&self.buildings);
             self.buildings =
                 image_data_wrapper::get_prediction(&self.model_name.clone(), &self.path_to_image);
+            dbg!(&self.buildings);
             self.should_get_prediction = false;
         }
     }
@@ -152,6 +155,7 @@ pub struct ScreenshotApp {
     selected_images: HashSet<String>,
     train_threads: Vec<threading::WorkerHandle<TrainThread>>,
     get_building_thread: threading::WorkerHandle<GetBuildingsThread>,
+    current_buildings: Option<Vec<image_data_wrapper::Building>>,
     active_tab: Tab,
     image_texture: Option<egui::TextureHandle>,
     labeled_rects: Vec<LabeledRect>,
@@ -160,6 +164,7 @@ pub struct ScreenshotApp {
     new_model_name: String,
     dataset_mode: Option<image_data_wrapper::DatasetType>,
     current_models: Vec<image_data_wrapper::Model>,
+    in_test_mode: bool,
 }
 
 #[derive(Clone)]
@@ -171,6 +176,7 @@ struct LabeledRect {
 impl Default for ScreenshotApp {
     fn default() -> Self {
         let mut s = Self {
+            current_buildings: None,
             screenshot_path: "/home/jesko/programmieren/ClashFoFBot/images".to_string(),
             keybind: "r".to_string(),
             selected_image: None,
@@ -201,6 +207,7 @@ impl Default for ScreenshotApp {
             new_model_name: "".to_string(),
             dataset_mode: None, // Standardwert
             current_models: vec![],
+            in_test_mode: false,
         };
 
         s.reload_models();
@@ -224,7 +231,7 @@ impl ScreenshotApp {
         });
     }
 
-    fn update_err(&mut self, _ui: &mut egui::Ui, ctx: &egui::Context) {
+    fn update_err(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let fade_start = std::time::Duration::from_secs(4);
         let fade_duration = std::time::Duration::from_secs(2);
         let now = std::time::Instant::now();
@@ -298,7 +305,9 @@ impl ScreenshotApp {
 
             let rect = egui::Rect::from_min_size(pos, size);
             let rect_expanded = rect.expand2(padding);
+
             painter.rect_filled(rect_expanded, 5.0, bg_color);
+
             painter.rect_stroke(
                 rect_expanded,
                 5.0,
@@ -515,10 +524,6 @@ impl ScreenshotApp {
             });
 
         if resp.response.changed() {
-            self.get_building_thread
-                .set_field("path_to_image", self.selected_image.clone().unwrap());
-            self.get_building_thread
-                .set_field("should_get_prediction", true);
             self.create_error("Changed Img", MessageType::Success);
         }
     }
@@ -625,10 +630,6 @@ impl ScreenshotApp {
                         .clicked()
                     {
                         self.selected_model = Some(name.clone());
-                        self.get_building_thread
-                            .set_field("model_name", name.to_string());
-                        self.get_building_thread
-                            .set_field("should_get_prediction", true);
                         self.create_error("Model geändert", MessageType::Success);
                     }
                 }
@@ -770,6 +771,42 @@ impl ScreenshotApp {
         });
     }
 
+    fn update_buildings(&mut self) {
+        if self.current_buildings.is_some() {
+            return;
+        }
+
+        let buildings_res = self
+            .get_building_thread
+            .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>("buildings");
+
+        dbg!(&buildings_res);
+
+        let buildings = if let Some(val) = buildings_res {
+            val
+        } else {
+            self.create_error("Konnte Buildings nicht Laden", MessageType::Error);
+            Ok(vec![])
+        };
+
+        if let Err(e) = buildings.clone() {
+            if e == FofError::ThreadNotInitialized {
+                self.create_error(
+                    "Thread um Buildings zu bekommen ist noch nicht inizialisiert",
+                    MessageType::Warning,
+                );
+            } else {
+                self.create_error(
+                    format!("Konnte Buildings nicht bekommen: {:?}", e),
+                    MessageType::Error,
+                );
+            }
+        } else if let Ok(bldngs) = buildings {
+            self.current_buildings = Some(bldngs);
+            self.create_error("Buildings Bekommen", MessageType::Success);
+        }
+    }
+
     fn model_testen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.collapsing("Model Testen", |ui: &mut egui::Ui| {
             ui.group(|ui: &mut egui::Ui| {
@@ -778,61 +815,78 @@ impl ScreenshotApp {
                 self.update_image_list();
                 self.show_selectable_models(ui);
             });
+
+            if !self.in_test_mode {
+                if let Some(img) = self.selected_image.clone() {
+                    if let Some(mdl) = &self.selected_model {
+                        if ui.button("Show Test").clicked() {
+                            self.get_building_thread
+                                .set_field("model_name", mdl.to_string());
+                            self.get_building_thread
+                                .set_field("path_to_image", img.to_string());
+                            self.get_building_thread
+                                .set_field("should_get_prediction", true);
+                            self.get_building_thread
+                                .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>(
+                                    "buildings",
+                                );
+                            self.current_buildings = None;
+                            self.in_test_mode = true;
+                        }
+                    }
+                }
+            }
+
+            let mut modeclone = self.in_test_mode;
+
+            // The extra window
+            egui::Window::new("Model Test")
+                .open(&mut modeclone)
+                .show(ctx, |ui: &mut egui::Ui| {
+                    if let Some(selected) = &self.selected_image {
+                        self.update_image_texture(ctx, selected.to_string());
+
+                        if let Some(texture) = &self.image_texture {
+                            let (img, scale) = self.get_scaled_texture(ui, texture);
+                            let response = ui.add(img);
+
+                            let rect = response.rect;
+
+                            self.update_buildings();
+
+                            if let Some(buildings) = self.current_buildings.clone() {
+                                let avg_confidence =
+                                    image_data_wrapper::get_avg_confidence(&buildings);
+
+                                if let Err(e) = avg_confidence.clone() {
+                                    self.create_error(
+                                        format!(
+                                    "Konnte die Durchschnittliche Confidence nicht bekommen: {:?}",
+                                    e
+                                ),
+                                        MessageType::Error,
+                                    );
+                                }
+
+                                if let Ok(avg) = avg_confidence {
+                                    ui.label(format!("Durchschnittliche Confidence: {}", avg));
+                                }
+
+                                self.draw_buildings(ui, buildings, rect, scale);
+                            }
+                        }
+                    }
+                });
+
+            self.in_test_mode = modeclone;
+
             if let Some(selected) = &self.selected_image {
                 self.update_image_texture(ctx, selected.to_string());
 
                 if let Some(texture) = &self.image_texture {
+                    ui.label("Vorschau: ");
                     let (img, scale) = self.get_scaled_texture(ui, texture);
                     let response = ui.add(img);
-
-                    let buildings_res = self
-                        .get_building_thread
-                        .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>(
-                            "buildings",
-                        );
-
-                    let buildings = if let Some(val) = buildings_res {
-                        val
-                    } else {
-                        self.create_error("Konnte Buildings nicht Laden", MessageType::Error);
-                        Ok(vec![])
-                    };
-
-                    if let Err(e) = buildings.clone() {
-                        if e == FofError::ThreadNotInitialized {
-                            self.create_error(
-                                "Thread um Buildings zu bekommen ist noch nicht inizialisiert",
-                                MessageType::Warning,
-                            );
-                        } else {
-                            self.create_error(
-                                format!("Konnte Buildings nicht bekommen: {:?}", e),
-                                MessageType::Error,
-                            );
-                        }
-                    }
-
-                    let rect = response.rect;
-
-                    if let Ok(buildings) = buildings {
-                        let avg_confidence = image_data_wrapper::get_avg_confidence(&buildings);
-
-                        if let Err(e) = avg_confidence.clone() {
-                            self.create_error(
-                                format!(
-                                    "Konnte die Durchschnittliche Confidence nicht bekommen: {:?}",
-                                    e
-                                ),
-                                MessageType::Error,
-                            );
-                        }
-
-                        if let Ok(avg) = avg_confidence {
-                            ui.label(format!("Durchschnittliche Confidence: {}", avg));
-                        }
-
-                        self.draw_buildings(ui, buildings, rect, scale);
-                    }
                 }
             }
         });
@@ -889,10 +943,6 @@ impl ScreenshotApp {
                             .clicked()
                         {
                             self.selected_model = Some(name.clone());
-                            self.get_building_thread
-                                .set_field("model_name", name.to_string());
-                            self.get_building_thread
-                                .set_field("should_get_prediction", true);
                             self.create_error("Model geändert", MessageType::Success);
                         }
                     }
@@ -943,9 +993,13 @@ impl ScreenshotApp {
     }
 
     fn model(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        ui.separator();
         self.manage_models(ui);
+        ui.separator();
         self.model_training(ui);
+        ui.separator();
         self.model_testen(ui, ctx);
+        ui.separator();
     }
 
     fn extract_numbers(s: &str) -> Vec<i32> {
@@ -982,8 +1036,6 @@ impl ScreenshotApp {
             if pointer_released {
                 if let Some(r) = self.labeled_rects.last() {
                     let lvls = ScreenshotApp::extract_numbers(&r.label);
-
-                    dbg!(&lvls);
 
                     if lvls.len() > 1 {
                         self.create_error(
@@ -1172,8 +1224,15 @@ impl ScreenshotApp {
 
                 let (img_target, label_target) = (Path::new(img_target), Path::new(label_target));
 
-                let filename = Path::new(image_path).file_name().unwrap().to_str().unwrap();
-                let target_img_path = img_target.join(filename);
+                let mut filename = Path::new(image_path)
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string();
+                filename.push_str(rng.random_range(i128::MIN..i128::MAX).to_string().as_str());
+
+                let target_img_path = img_target.join(filename.as_str());
 
                 if fs::create_dir_all(img_target).is_err()
                     || fs::copy(image_path, &target_img_path).is_err()
@@ -1458,6 +1517,9 @@ impl ScreenshotApp {
                     if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
                         self.save_labeld_rects(rect.size());
                         self.labeling_que.pop();
+                        if self.labeling_que.is_empty() {
+                            self.selected_images.clear();
+                        }
                         self.image_texture = None;
                     }
 
