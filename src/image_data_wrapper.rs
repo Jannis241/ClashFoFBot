@@ -1,5 +1,3 @@
-use eframe::epaint::stats;
-use image::imageops::FilterType::Triangle;
 use strum_macros::AsRefStr;
 use time::OffsetDateTime;
 
@@ -19,7 +17,7 @@ pub struct Building {
     pub bounding_box: (f32, f32, f32, f32),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Model {
     pub name: String,
     pub rating: f64,
