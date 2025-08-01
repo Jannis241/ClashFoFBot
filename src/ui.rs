@@ -1,4 +1,5 @@
 use crate::{prelude::*, threading::WorkerHandle};
+use eframe::egui::Vec2;
 
 pub fn start_ui() {
     let options = eframe::NativeOptions::default();
@@ -159,7 +160,7 @@ pub struct ScreenshotApp {
     current_buildings: Option<Vec<image_data_wrapper::Building>>,
     active_tab: Tab,
     image_texture: Option<egui::TextureHandle>,
-    labeled_rects: Vec<LabeledRect>,
+    labeled_rects: Vec<SmthLabeled>,
     current_rect_start: Option<egui::Pos2>,
     current_rect_end: Option<egui::Pos2>,
     new_model_name: String,
@@ -173,6 +174,66 @@ pub struct ScreenshotApp {
 struct LabeledRect {
     rect: egui::Rect,
     label: String,
+}
+
+#[derive(Clone)]
+struct LabeledLine {
+    start: Vec2,
+    end: Vec2,
+    divisions: usize,
+    label: String,
+}
+
+#[derive(Clone)]
+enum SmthLabeled {
+    Rect(LabeledRect),
+    Line(LabeledLine),
+}
+
+impl SmthLabeled {
+    fn get_label(&self) -> String {
+        if let SmthLabeled::Rect(re) = self {
+            re.label.clone()
+        } else if let SmthLabeled::Line(li) = self {
+            li.label.clone()
+        } else {
+            panic!("wie konnte das passieren????????????");
+        }
+    }
+
+    fn set_label(&mut self, new: String) {
+        if let SmthLabeled::Rect(re) = self {
+            re.label = new;
+        } else if let SmthLabeled::Line(li) = self {
+            li.label = new;
+        } else {
+            panic!("wie fofofofofofofoffo  konnte das passieren????????????");
+        }
+    }
+
+    fn push_str_to_label(&mut self, s: &str) {
+        if let SmthLabeled::Rect(re) = self {
+            re.label.push_str(s);
+        } else if let SmthLabeled::Line(li) = self {
+            li.label.push_str(s);
+        } else {
+            panic!("wie fofofofofofofoffo  konnte das passieren????????????");
+        }
+    }
+
+    fn pop(&mut self) {
+        if let SmthLabeled::Rect(re) = self {
+            re.label.pop();
+        } else if let SmthLabeled::Line(li) = self {
+            li.label.pop();
+        } else {
+            panic!("wie fofofofofofofoffo  konnte das passieren????????????");
+        }
+    }
+
+    fn get_rects(&self) -> Vec<LabeledRect> {
+        todo!()
+    }
 }
 
 impl Default for ScreenshotApp {
@@ -597,7 +658,7 @@ impl ScreenshotApp {
                 egui::Align2::LEFT_TOP,
                 label_text,
                 egui::TextStyle::Body.resolve(ui.style()),
-                color,
+                Color32::BLUE,
             );
         }
     }
@@ -1024,7 +1085,7 @@ impl ScreenshotApp {
             }
             // Loslassen
             if pointer_released {
-                if let Some(r) = self.labeled_rects.last() {
+                if let Some(SmthLabeled::Rect(r)) = self.labeled_rects.last() {
                     let lvls = ScreenshotApp::extract_numbers(&r.label);
 
                     if lvls.len() > 1 {
@@ -1043,10 +1104,10 @@ impl ScreenshotApp {
                 }
                 if let (Some(start), Some(end)) = (self.current_rect_start, self.current_rect_end) {
                     let rect = egui::Rect::from_two_pos(start, end).expand(2.0);
-                    self.labeled_rects.push(LabeledRect {
+                    self.labeled_rects.push(SmthLabeled::Rect(LabeledRect {
                         rect,
                         label: String::new(),
-                    });
+                    }));
 
                     self.current_rect_end = None;
                     self.current_rect_start = None;
@@ -1054,11 +1115,17 @@ impl ScreenshotApp {
             }
         }
     }
+
     fn add_lable_to_yaml(&mut self, ctx: &egui::Context) {
         let mut parts: Vec<String> = self
             .labeled_rects
             .iter()
-            .map(|r| r.label.chars().take_while(|c| !c.is_numeric()).collect())
+            .map(|r| {
+                r.get_label()
+                    .chars()
+                    .take_while(|c| !c.is_numeric())
+                    .collect()
+            })
             .collect();
         if self.current_rect_start.is_none() {
             if let Some(r) = self.labeled_rects.last_mut() {
@@ -1088,38 +1155,50 @@ impl ScreenshotApp {
 
                 //dbg!(&class_names);
 
+                let label = r.get_label();
+
                 for event in &ctx.input(|i| i.events.clone()) {
                     match event {
                         egui::Event::Text(text) => {
                             if text == " " {
-                                let trimmed = r.label.trim();
+                                let trimmed = label.trim();
                                 let matches: Vec<&String> = class_names
                                     .iter()
                                     .filter(|name| name.starts_with(trimmed) && *name != trimmed)
                                     .collect();
 
                                 if matches.len() == 1 {
-                                    r.label = matches[0].clone();
+                                    r.set_label(matches[0].clone());
                                 }
                             } else {
-                                r.label.push_str(text);
+                                r.push_str_to_label(text);
                             }
                         }
                         egui::Event::Key {
                             key, pressed: true, ..
                         } => match key {
                             egui::Key::Backspace => {
-                                r.label.pop();
+                                r.pop();
+                            }
+                            egui::Key::Plus => {
+                                if let SmthLabeled::Line(li) = r {
+                                    li.divisions += 1;
+                                }
+                            }
+                            egui::Key::Minus => {
+                                if let SmthLabeled::Line(li) = r {
+                                    li.divisions -= 1;
+                                }
                             }
                             egui::Key::Space => {
-                                let trimmed = r.label.trim();
+                                let trimmed = label.trim();
                                 let matches: Vec<&String> = class_names
                                     .iter()
                                     .filter(|name| name.starts_with(trimmed) && *name != trimmed)
                                     .collect();
 
                                 if matches.len() == 1 {
-                                    r.label = matches[0].clone();
+                                    r.set_label(matches[0].clone());
                                 }
                             }
                             _ => {}
@@ -1261,7 +1340,13 @@ impl ScreenshotApp {
 
                 let mut yaml_updated = false;
 
+                let mut all_labeled_rects = vec![];
+
                 for lr in self.labeled_rects.clone().iter() {
+                    all_labeled_rects.append(&mut lr.get_rects());
+                }
+
+                for lr in all_labeled_rects.iter() {
                     let raw_label = lr.label.trim();
                     let extracted = label_regex.find(raw_label).map(|m| m.as_str().to_string());
 
@@ -1347,7 +1432,13 @@ impl ScreenshotApp {
         // Rechtecke zeichnen
         let painter = ui.painter();
 
-        for (idx, lr) in self.labeled_rects.iter().enumerate() {
+        let mut all_labeled_rects = vec![];
+
+        for lr in self.labeled_rects.clone().iter() {
+            all_labeled_rects.append(&mut lr.get_rects());
+        }
+
+        for (idx, lr) in all_labeled_rects.iter().enumerate() {
             painter.rect_stroke(lr.rect, 0.0, (2.0, egui::Color32::RED), StrokeKind::Middle);
             if idx + 1 == self.labeled_rects.len() {
                 painter.text(
