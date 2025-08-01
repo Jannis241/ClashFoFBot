@@ -23,3 +23,7 @@ label tab:
         - also dann ist oben dieser stop session button und dann daneben so "image.png" "3/5" sowas halt
 
 
+
+machen dass man auch jpg und andere bild formate labeln udn auswählen kann
+
+
