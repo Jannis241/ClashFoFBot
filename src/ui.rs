@@ -165,6 +165,7 @@ pub struct ScreenshotApp {
     dataset_mode: Option<image_data_wrapper::DatasetType>,
     current_models: Vec<image_data_wrapper::Model>,
     in_test_mode: bool,
+    current_avg_conf: Option<f32>,
 }
 
 #[derive(Clone)]
@@ -176,6 +177,7 @@ struct LabeledRect {
 impl Default for ScreenshotApp {
     fn default() -> Self {
         let mut s = Self {
+            current_avg_conf: None,
             current_buildings: None,
             screenshot_path: "/home/jesko/programmieren/ClashFoFBot/images".to_string(),
             keybind: "r".to_string(),
@@ -780,8 +782,6 @@ impl ScreenshotApp {
             .get_building_thread
             .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>("buildings");
 
-        dbg!(&buildings_res);
-
         let buildings = if let Some(val) = buildings_res {
             val
         } else {
@@ -803,6 +803,7 @@ impl ScreenshotApp {
             }
         } else if let Ok(bldngs) = buildings {
             self.current_buildings = Some(bldngs);
+            self.current_avg_conf = Some(image_data_wrapper::get_avg_confidence(&bldngs));
             self.create_error("Buildings Bekommen", MessageType::Success);
         }
     }
@@ -831,6 +832,7 @@ impl ScreenshotApp {
                                     "buildings",
                                 );
                             self.current_buildings = None;
+                            self.current_avg_conf = None;
                             self.in_test_mode = true;
                         }
                     }
@@ -855,20 +857,7 @@ impl ScreenshotApp {
                             self.update_buildings();
 
                             if let Some(buildings) = self.current_buildings.clone() {
-                                let avg_confidence =
-                                    image_data_wrapper::get_avg_confidence(&buildings);
-
-                                if let Err(e) = avg_confidence.clone() {
-                                    self.create_error(
-                                        format!(
-                                    "Konnte die Durchschnittliche Confidence nicht bekommen: {:?}",
-                                    e
-                                ),
-                                        MessageType::Error,
-                                    );
-                                }
-
-                                if let Ok(avg) = avg_confidence {
+                                if let Some(avg) = self.current_avg_conf {
                                     ui.label(format!("Durchschnittliche Confidence: {}", avg));
                                 }
 
@@ -1555,17 +1544,20 @@ impl eframe::App for ScreenshotApp {
             }
             self.update_err(ui, ctx);
 
-            // let mut errors = vec![];
-            //
-            // for thrd in self.train_threads.iter() {
-            //     if let Some(Some(e)) = thrd.poll_field::<Option<FofError>>("last_msg") {
-            //         errors.push(e);
-            //     }
-            // }
-            //
-            // for e in errors {
-            //     self.create_error(format!("Error while Training: {:?}", e), MessageType::Error);
-            // }
+            let mut errors = vec![];
+
+            for thrd in self.train_threads.iter() {
+                if let Some(winterarc) = thrd.poll_field::<Arc<Mutex<TrainStatus>>>("last_msg") {
+                    let trainingstatus = winterarc.lock().unwrap().clone();
+                    if let TrainStatus::Done(Some(e)) = trainingstatus {
+                        errors.push(e);
+                    }
+                }
+            }
+
+            for e in errors {
+                self.create_error(format!("Error while Training: {:?}", e), MessageType::Error);
+            }
         });
     }
 }
