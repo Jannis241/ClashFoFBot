@@ -802,7 +802,7 @@ impl ScreenshotApp {
                 );
             }
         } else if let Ok(bldngs) = buildings {
-            self.current_buildings = Some(bldngs);
+            self.current_buildings = Some(bldngs.clone());
             self.current_avg_conf = Some(image_data_wrapper::get_avg_confidence(&bldngs));
             self.create_error("Buildings Bekommen", MessageType::Success);
         }
