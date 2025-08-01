@@ -1193,7 +1193,12 @@ impl ScreenshotApp {
                     continue;
                 }
 
-                let label_path = label_target.join(filename.replace(".png", ".txt"));
+                let stem = Path::new(&filename)
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_string_lossy();
+                let label_path = label_target.join(format!("{}.txt", stem));
+
                 let mut label_file = match fs::File::create(&label_path) {
                     Ok(file) => file,
                     Err(_) => {
