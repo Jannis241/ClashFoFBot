@@ -324,7 +324,10 @@ impl ScreenshotApp {
                     .filter(|e| {
                         e.path()
                             .extension()
-                            .map(|ext| ext == "png")
+                            .map(|ext| {
+                                vec!["png", "jpg", "jpeg", "pdf", "gif", "webp"]
+                                    .contains(&ext.to_str().unwrap())
+                            })
                             .unwrap_or(false)
                     })
                     .collect();
@@ -768,74 +771,71 @@ impl ScreenshotApp {
     }
 
     fn model_testen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        ui.collapsing(
-            "Model testen, (TOTOTOTOTOTOTOTODODODODODODODOOTOODODOTDOTDOTDODTOTDOOTOTDODT)",
-            |ui: &mut egui::Ui| {
-                ui.group(|ui: &mut egui::Ui| {
-                    self.ordner_wählen(ui, "📂 Speicher Ordner der Test Images wählen");
-                    self.show_available_pngs(ui);
-                    self.update_image_list();
-                    self.show_selectable_models(ui);
-                });
-                if let Some(selected) = &self.selected_image {
-                    self.update_image_texture(ctx, selected.to_string());
+        ui.collapsing("Model Testen", |ui: &mut egui::Ui| {
+            ui.group(|ui: &mut egui::Ui| {
+                self.ordner_wählen(ui, "📂 Speicher Ordner der Test Images wählen");
+                self.show_available_pngs(ui);
+                self.update_image_list();
+                self.show_selectable_models(ui);
+            });
+            if let Some(selected) = &self.selected_image {
+                self.update_image_texture(ctx, selected.to_string());
 
-                    if let Some(texture) = &self.image_texture {
-                        let (img, scale) = self.get_scaled_texture(ui, texture);
-                        let response = ui.add(img);
+                if let Some(texture) = &self.image_texture {
+                    let (img, scale) = self.get_scaled_texture(ui, texture);
+                    let response = ui.add(img);
 
-                        let buildings_res =
-                            self.get_building_thread
-                                .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>(
-                                    "buildings",
-                                );
+                    let buildings_res = self
+                        .get_building_thread
+                        .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>(
+                            "buildings",
+                        );
 
-                        let buildings = if let Some(val) = buildings_res {
-                            val
+                    let buildings = if let Some(val) = buildings_res {
+                        val
+                    } else {
+                        self.create_error("Konnte Buildings nicht Laden", MessageType::Error);
+                        Ok(vec![])
+                    };
+
+                    if let Err(e) = buildings.clone() {
+                        if e == FofError::ThreadNotInitialized {
+                            self.create_error(
+                                "Thread um Buildings zu bekommen ist noch nicht inizialisiert",
+                                MessageType::Warning,
+                            );
                         } else {
-                            self.create_error("Konnte Buildings nicht Laden", MessageType::Error);
-                            Ok(vec![])
-                        };
-
-                        if let Err(e) = buildings.clone() {
-                            if e == FofError::ThreadNotInitialized {
-                                self.create_error(
-                                    "Thread um Buildings zu bekommen ist noch nicht inizialisiert",
-                                    MessageType::Warning,
-                                );
-                            } else {
-                                self.create_error(
-                                    format!("Konnte Buildings nicht bekommen: {:?}", e),
-                                    MessageType::Error,
-                                );
-                            }
+                            self.create_error(
+                                format!("Konnte Buildings nicht bekommen: {:?}", e),
+                                MessageType::Error,
+                            );
                         }
+                    }
 
-                        let rect = response.rect;
+                    let rect = response.rect;
 
-                        if let Ok(buildings) = buildings {
-                            let avg_confidence = image_data_wrapper::get_avg_confidence(&buildings);
+                    if let Ok(buildings) = buildings {
+                        let avg_confidence = image_data_wrapper::get_avg_confidence(&buildings);
 
-                            if let Err(e) = avg_confidence.clone() {
-                                self.create_error(
-                                    format!(
+                        if let Err(e) = avg_confidence.clone() {
+                            self.create_error(
+                                format!(
                                     "Konnte die Durchschnittliche Confidence nicht bekommen: {:?}",
                                     e
                                 ),
-                                    MessageType::Error,
-                                );
-                            }
-
-                            if let Ok(avg) = avg_confidence {
-                                ui.label(format!("Durchschnittliche Confidence: {}", avg));
-                            }
-
-                            self.draw_buildings(ui, buildings, rect, scale);
+                                MessageType::Error,
+                            );
                         }
+
+                        if let Ok(avg) = avg_confidence {
+                            ui.label(format!("Durchschnittliche Confidence: {}", avg));
+                        }
+
+                        self.draw_buildings(ui, buildings, rect, scale);
                     }
                 }
-            },
-        );
+            }
+        });
     }
 
     fn model_training(&mut self, ui: &mut egui::Ui) {
@@ -1016,7 +1016,7 @@ impl ScreenshotApp {
                             egui::Key::Backspace => {
                                 r.label.pop();
                             }
-                            egui::Key::Tab => {
+                            egui::Key::Space => {
                                 let trimmed = r.label.trim();
                                 let matches: Vec<&String> = class_names
                                     .iter()
@@ -1367,7 +1367,7 @@ impl ScreenshotApp {
                     self.handel_labeling_cursor(ui, rect);
                     self.add_lable_to_yaml(ctx);
 
-                    if ctx.input(|i| i.key_pressed(egui::Key::Backspace)) {
+                    if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
                         self.save_labeld_rects(rect.size());
                         self.labeling_que.pop();
                         self.image_texture = None;
