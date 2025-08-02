@@ -1654,7 +1654,6 @@ impl ScreenshotApp {
         if !is_running {
             ui.group(|ui| {
                 egui::ScrollArea::vertical()
-                    .auto_shrink([false; 2]) // optional, verhindert Auto-Schrumpfen
                     .max_height(500.)
                     .show(ui, |ui| {
                         ui.heading("Png(s) Zum Labeln Wählen");
