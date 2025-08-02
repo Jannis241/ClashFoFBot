@@ -175,7 +175,7 @@ pub struct ScreenshotApp {
 }
 
 // Wie stark sich Rechtecke überlappen (0.0 = kein Overlap, 0.5 = 50% Overlap)
-const OVERLAP_PERCENT: f32 = 0.2;
+const OVERLAP_PERCENT: f32 = 0.35;
 
 #[derive(Clone)]
 struct LabeledRect {
