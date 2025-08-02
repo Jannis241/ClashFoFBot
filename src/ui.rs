@@ -1150,13 +1150,6 @@ impl ScreenshotApp {
                 }
                 self.current_rect_end = pointer_pos;
             }
-            // Ziehen
-            if pointer_down2 {
-                if self.current_line_start.is_none() {
-                    self.current_line_start = pointer_pos;
-                }
-                self.current_line_end = pointer_pos;
-            }
         }
         // Loslassen
         if pointer_released {
@@ -1185,7 +1178,13 @@ impl ScreenshotApp {
                 self.current_rect_start = None;
             }
         }
-
+        // Ziehen
+        if pointer_down2 {
+            if self.current_line_start.is_none() {
+                self.current_line_start = pointer_pos;
+            }
+            self.current_line_end = pointer_pos;
+        }
         // Loslassen
         if pointer_released2 {
             if let (Some(start), Some(end)) = (self.current_line_start, self.current_line_end) {
@@ -1368,7 +1367,7 @@ impl ScreenshotApp {
                 ("dataset_level", Regex::new(r"\d+").unwrap()),     // Nur Ziffern
             ];
 
-            for (dataset_base, label_regex) in dataset_paths {
+            for (idx, (dataset_base, label_regex)) in dataset_paths.iter().enumerate() {
                 let str_path = format!("{}/data.yaml", dataset_base);
                 let yaml_path = Path::new(&str_path);
                 let yaml_content = match fs::read_to_string(yaml_path) {
@@ -1482,6 +1481,9 @@ impl ScreenshotApp {
 
                     let class_id = if let Some(id) = class_map.get(&extracted_label) {
                         *id
+                    } else if idx == 0 {
+                        self.create_error("Label not found in buildings data.yaml!!! (was hat bro schon wieder getan)", MessageType::Error);
+                        continue;
                     } else {
                         let new_id = data.names.len();
                         data.names.insert(new_id, extracted_label.clone());
