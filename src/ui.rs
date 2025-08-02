@@ -1191,11 +1191,32 @@ impl ScreenshotApp {
             // Loslassen
             if pointer_released {
                 if let (Some(start), Some(end)) = (self.current_line_start, self.current_line_end) {
+                    let mut avg_divisons = vec![];
+                    for lsmth in self.labeled_rects.iter() {
+                        if let SmthLabeled::Line(li) = lsmth {
+                            let length = li.start.distance(li.end);
+                            avg_divisons.push(li.divisions as f32 / length);
+                        }
+                    }
+
+                    let divisions = if avg_divisons.len() != 0 {
+                        let avg_divisons_per_unit =
+                            avg_divisons.iter().sum::<f32>() / avg_divisons.len() as f32;
+
+                        let this_length = start.distance(end);
+
+                        let this_div = this_length * avg_divisons_per_unit;
+
+                        this_div as usize
+                    } else {
+                        0
+                    };
+
                     self.labeled_rects.push(SmthLabeled::Line(LabeledLine {
                         start,
                         end,
-                        divisions: 0,
-                        label: String::new(),
+                        divisions,
+                        label: String::from("mauer"),
                     }));
 
                     self.current_line_end = None;
