@@ -1,3 +1,47 @@
 train: images/train
 val: images/val
 names:
+  32: infernoturm
+  31: elexirlager
+  39: zauberfabrik
+  1: minenwerfer
+  0: bogenschützenturm
+  24: dunklekaserne
+  6: duklerelexirbohrer
+  4: elexirsammler
+  12: luftabwehr
+  5: armeelager
+  13: querschlägerkanone
+  9: helferhütte
+  38: luftfeger
+  42: gigabombe
+  22: wächter
+  37: clanburg
+  43: mauer
+  21: goldmine
+  3: magierturm
+  14: gladi
+  41: heldenhalle
+  7: werkstatt
+  27: könig
+  33: giftzauberturm
+  36: streukatapult
+  16: multientwicklungsturm
+  17: xbogen
+  26: königin
+  11: dunklerelexirbohrer
+  19: bauarbeiterhütte
+  20: bombenturm
+  29: monolyth
+  8: labor
+  30: goldlager
+  2: multibogenschützenturm
+  15: dunklezauberfabrik
+  25: bob
+  10: tesla
+  28: kaserne
+  35: dunkleselexirlager
+  18: feuerspeier
+  34: rathaus
+  40: begleiterhütte
+  23: schmied
