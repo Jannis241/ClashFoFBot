@@ -1653,11 +1653,19 @@ impl ScreenshotApp {
 
         if !is_running {
             ui.group(|ui| {
-                ui.heading("Png(s) Zum Labeln Wählen");
-                ui.separator();
-                self.ordner_wählen(ui, "📂 Speicher Ordner der zu Labelnden Images wählen");
-                self.update_image_list();
-                self.show_available_pngs_multiple(ui);
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false; 2]) // optional, verhindert Auto-Schrumpfen
+                    .max_height(500.)
+                    .show(ui, |ui| {
+                        ui.heading("Png(s) Zum Labeln Wählen");
+                        ui.separator();
+                        self.ordner_wählen(
+                            ui,
+                            "📂 Speicher Ordner der zu Labelnden Images wählen",
+                        );
+                        self.update_image_list();
+                        self.show_available_pngs_multiple(ui);
+                    });
 
                 ui.horizontal(|ui: &mut egui::Ui| {
                     if ui.button("Alle roten hinzufügen").clicked() {
