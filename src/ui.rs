@@ -1,5 +1,6 @@
 use crate::{prelude::*, threading::WorkerHandle};
-use eframe::egui::Vec2;
+use eframe::egui::{Pos2, Vec2};
+use egui::{vec2, Rect};
 
 pub fn start_ui() {
     let options = eframe::NativeOptions::default();
@@ -163,12 +164,18 @@ pub struct ScreenshotApp {
     labeled_rects: Vec<SmthLabeled>,
     current_rect_start: Option<egui::Pos2>,
     current_rect_end: Option<egui::Pos2>,
+
+    current_line_start: Option<egui::Pos2>,
+    current_line_end: Option<egui::Pos2>,
     new_model_name: String,
     dataset_mode: Option<image_data_wrapper::DatasetType>,
     current_models: Vec<image_data_wrapper::Model>,
     in_test_mode: bool,
     current_avg_conf: Option<f32>,
 }
+
+// Wie stark sich Rechtecke überlappen (0.0 = kein Overlap, 0.5 = 50% Overlap)
+const OVERLAP_PERCENT: f32 = 0.2;
 
 #[derive(Clone)]
 struct LabeledRect {
@@ -178,9 +185,9 @@ struct LabeledRect {
 
 #[derive(Clone)]
 struct LabeledLine {
-    start: Vec2,
-    end: Vec2,
-    divisions: usize,
+    start: Pos2,
+    end: Pos2,
+    divisions: usize, // Anzahl Zwischenpunkte → Rechtecke = divisions + 1
     label: String,
 }
 
@@ -192,47 +199,97 @@ enum SmthLabeled {
 
 impl SmthLabeled {
     fn get_label(&self) -> String {
-        if let SmthLabeled::Rect(re) = self {
-            re.label.clone()
-        } else if let SmthLabeled::Line(li) = self {
-            li.label.clone()
-        } else {
-            panic!("wie konnte das passieren????????????");
+        match self {
+            SmthLabeled::Rect(re) => re.label.clone(),
+            SmthLabeled::Line(li) => li.label.clone(),
         }
     }
 
     fn set_label(&mut self, new: String) {
-        if let SmthLabeled::Rect(re) = self {
-            re.label = new;
-        } else if let SmthLabeled::Line(li) = self {
-            li.label = new;
-        } else {
-            panic!("wie fofofofofofofoffo  konnte das passieren????????????");
+        match self {
+            SmthLabeled::Rect(re) => re.label = new,
+            SmthLabeled::Line(li) => li.label = new,
         }
     }
 
     fn push_str_to_label(&mut self, s: &str) {
-        if let SmthLabeled::Rect(re) = self {
-            re.label.push_str(s);
-        } else if let SmthLabeled::Line(li) = self {
-            li.label.push_str(s);
-        } else {
-            panic!("wie fofofofofofofoffo  konnte das passieren????????????");
+        match self {
+            SmthLabeled::Rect(re) => re.label.push_str(s),
+            SmthLabeled::Line(li) => li.label.push_str(s),
         }
     }
 
     fn pop(&mut self) {
-        if let SmthLabeled::Rect(re) = self {
-            re.label.pop();
-        } else if let SmthLabeled::Line(li) = self {
-            li.label.pop();
-        } else {
-            panic!("wie fofofofofofofoffo  konnte das passieren????????????");
+        match self {
+            SmthLabeled::Rect(re) => {
+                re.label.pop();
+            }
+            SmthLabeled::Line(li) => {
+                li.label.pop();
+            }
         }
     }
 
     fn get_rects(&self) -> Vec<LabeledRect> {
-        todo!()
+        match self {
+            SmthLabeled::Rect(re) => vec![re.clone()],
+            SmthLabeled::Line(li) => {
+                let divisions = li.divisions;
+
+                if divisions == 0 {
+                    return vec![LabeledRect {
+                        rect: Rect::from_two_pos(li.start, li.end),
+                        label: li.label.clone(),
+                    }];
+                }
+
+                let count = divisions + 1;
+                let dummy_width = 1.0;
+                let step = dummy_width * (1.0 - OVERLAP_PERCENT);
+
+                // Simuliere Dummy Zentren entlang X-Achse
+                let mut dummy_centers = Vec::with_capacity(count);
+                for i in 0..count {
+                    dummy_centers.push(i as f32 * step + dummy_width / 2.0);
+                }
+
+                // Dummy Rechteck: links und rechts
+                let first_left = dummy_centers[0] - dummy_width / 2.0;
+                let last_right = dummy_centers[count - 1] + dummy_width / 2.0;
+                let simulated_length = last_right - first_left;
+
+                // Echte Vektoren und Richtung
+                let start = li.start.to_vec2();
+                let end = li.end.to_vec2();
+                let direction = end - start;
+                let real_length = direction.length();
+                let dir_norm = direction / real_length;
+
+                let mut rects = Vec::with_capacity(count);
+
+                for &center_x in &dummy_centers {
+                    // Relative Position auf Strecke [0..1]
+                    let relative_pos = (center_x - first_left) / simulated_length;
+
+                    // Skalierte Mitte
+                    let center_pos = start + dir_norm * (relative_pos * real_length);
+
+                    // Skalierte halbe Breite
+                    let half_width = (dummy_width / simulated_length) * real_length * 0.5;
+
+                    // Punkte links und rechts vom Zentrum entlang Richtung
+                    let p1 = (center_pos - dir_norm * half_width).to_pos2();
+                    let p2 = (center_pos + dir_norm * half_width).to_pos2();
+
+                    rects.push(LabeledRect {
+                        rect: Rect::from_two_pos(p1, p2),
+                        label: li.label.clone(),
+                    });
+                }
+
+                rects
+            }
+        }
     }
 }
 
@@ -268,6 +325,8 @@ impl Default for ScreenshotApp {
             labeled_rects: vec![],
             current_rect_start: None,
             current_rect_end: None,
+            current_line_end: None,
+            current_line_start: None,
             new_model_name: "".to_string(),
             dataset_mode: None, // Standardwert
             current_models: vec![],
@@ -1113,6 +1172,36 @@ impl ScreenshotApp {
                     self.current_rect_start = None;
                 }
             }
+
+            let pointer_down = ui.input(|i| i.pointer.secondary_down());
+            let pointer_clicked = ui.input(|i| i.pointer.secondary_clicked());
+            let pointer_released = ui.input(|i| i.pointer.secondary_released());
+
+            if pointer_clicked {
+                self.current_line_start = pointer_pos;
+                self.current_line_end = self.current_line_start;
+            }
+            // Ziehen
+            if pointer_down {
+                if self.current_line_start.is_none() {
+                    self.current_line_start = pointer_pos;
+                }
+                self.current_line_end = pointer_pos;
+            }
+            // Loslassen
+            if pointer_released {
+                if let (Some(start), Some(end)) = (self.current_line_start, self.current_line_end) {
+                    self.labeled_rects.push(SmthLabeled::Line(LabeledLine {
+                        start,
+                        end,
+                        divisions: 0,
+                        label: String::new(),
+                    }));
+
+                    self.current_line_end = None;
+                    self.current_line_start = None;
+                }
+            }
         }
     }
 
@@ -1170,6 +1259,7 @@ impl ScreenshotApp {
                                 if matches.len() == 1 {
                                     r.set_label(matches[0].clone());
                                 }
+                            } else if text == "+" || text == "-" {
                             } else {
                                 r.push_str_to_label(text);
                             }
@@ -1187,7 +1277,10 @@ impl ScreenshotApp {
                             }
                             egui::Key::Minus => {
                                 if let SmthLabeled::Line(li) = r {
-                                    li.divisions -= 1;
+                                    if li.divisions == 0 {
+                                    } else {
+                                        li.divisions -= 1;
+                                    }
                                 }
                             }
                             egui::Key::Space => {
@@ -1226,7 +1319,18 @@ impl ScreenshotApp {
 
     fn save_labeld_rects(&mut self, final_size: egui::Vec2) {
         if let Some(image_path) = self.labeling_que.clone().last() {
+            let mut rng = rand::thread_rng();
             self.create_error("Speichere YOLO-Labels...", MessageType::Success);
+
+            let old_img_path = image_path;
+
+            let image_paths = image_path.split(".").collect::<Vec<&str>>();
+            let mut stem = image_paths[0].to_string();
+            let ending = ".".to_string() + image_paths[1];
+            stem.push_str(rng.random_range(i128::MIN..i128::MAX).to_string().as_str());
+            stem.push_str(&ending);
+
+            let image_path = stem;
 
             use regex::Regex;
             use std::collections::HashMap;
@@ -1277,7 +1381,6 @@ impl ScreenshotApp {
                 let w = final_size.x;
                 let h = final_size.y;
 
-                let mut rng = rand::thread_rng();
                 let is_train = rng.gen_bool(0.8);
                 let (img_target, label_target) = if is_train {
                     (
@@ -1293,18 +1396,19 @@ impl ScreenshotApp {
 
                 let (img_target, label_target) = (Path::new(img_target), Path::new(label_target));
 
-                let mut filename = Path::new(image_path)
+                let filename = Path::new(&image_path)
                     .file_name()
                     .unwrap()
                     .to_str()
                     .unwrap()
                     .to_string();
-                filename.push_str(rng.random_range(i128::MIN..i128::MAX).to_string().as_str());
 
                 let target_img_path = img_target.join(filename.as_str());
 
+                dbg!(&target_img_path);
+
                 if fs::create_dir_all(img_target).is_err()
-                    || fs::copy(image_path, &target_img_path).is_err()
+                    || fs::copy(&old_img_path, &target_img_path).is_err()
                 {
                     self.create_error(
                         &format!("Bild konnte nicht nach {dataset_base} kopiert werden."),
@@ -1326,6 +1430,8 @@ impl ScreenshotApp {
                     .unwrap_or_default()
                     .to_string_lossy();
                 let label_path = label_target.join(format!("{}.txt", stem));
+
+                dbg!(&label_path);
 
                 let mut label_file = match fs::File::create(&label_path) {
                     Ok(file) => file,
@@ -1440,7 +1546,7 @@ impl ScreenshotApp {
 
         for (idx, lr) in all_labeled_rects.iter().enumerate() {
             painter.rect_stroke(lr.rect, 0.0, (2.0, egui::Color32::RED), StrokeKind::Middle);
-            if idx + 1 == self.labeled_rects.len() {
+            if idx + 1 == all_labeled_rects.len() {
                 painter.text(
                     lr.rect.left_top(),
                     egui::Align2::LEFT_TOP,
@@ -1454,6 +1560,10 @@ impl ScreenshotApp {
         if let (Some(start), Some(current)) = (self.current_rect_start, self.current_rect_end) {
             let rect = egui::Rect::from_two_pos(start, current);
             painter.rect_stroke(rect, 0.0, (1.0, egui::Color32::GREEN), StrokeKind::Middle);
+        }
+
+        if let (Some(start), Some(current)) = (self.current_line_start, self.current_line_end) {
+            painter.line_segment([start, current], (1.0, egui::Color32::GREEN));
         }
     }
 
