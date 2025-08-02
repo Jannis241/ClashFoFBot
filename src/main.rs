@@ -39,11 +39,11 @@ impl From<io::Error> for FofError {
 }
 
 fn main() {
-    split_image::split(
-        "/Users/maus/Downloads/th16_base.webp",
-        9,
-        "/Users/maus/Downloads/splits",
-    );
+    // split_image::split(
+    //     "/Users/maus/Downloads/th_15.webp",
+    //     9,
+    //     "/Users/maus/Downloads/splits",
+    // );
     ui::start_ui();
     // debug::run_tests();
 }
