@@ -1125,15 +1125,23 @@ impl ScreenshotApp {
         let cursor_over_image = cursor_pos.map_or(false, |pos| rect.contains(pos));
 
         let pointer_pos = ui.input(|i| i.pointer.hover_pos());
+        let pointer_down = ui.input(|i| i.pointer.primary_down());
+        let pointer_clicked = ui.input(|i| i.pointer.primary_clicked());
+        let pointer_released = ui.input(|i| i.pointer.primary_released());
+
+        let pointer_down2 = ui.input(|i| i.pointer.secondary_down());
+        let pointer_clicked2 = ui.input(|i| i.pointer.secondary_clicked());
+        let pointer_released2 = ui.input(|i| i.pointer.secondary_released());
 
         if cursor_over_image {
-            let pointer_down = ui.input(|i| i.pointer.primary_down());
-            let pointer_clicked = ui.input(|i| i.pointer.primary_clicked());
-            let pointer_released = ui.input(|i| i.pointer.primary_released());
-
             if pointer_clicked {
                 self.current_rect_start = pointer_pos;
                 self.current_rect_end = self.current_rect_start;
+            }
+
+            if pointer_clicked2 {
+                self.current_line_start = pointer_pos;
+                self.current_line_end = self.current_line_start;
             }
             // Ziehen
             if pointer_down {
@@ -1142,86 +1150,75 @@ impl ScreenshotApp {
                 }
                 self.current_rect_end = pointer_pos;
             }
-            // Loslassen
-            if pointer_released {
-                if let Some(SmthLabeled::Rect(r)) = self.labeled_rects.last() {
-                    let lvls = ScreenshotApp::extract_numbers(&r.label);
-
-                    if lvls.len() > 1 {
-                        self.create_error(
-                            "Mehr als ein Level in Label Gefunden",
-                            MessageType::Warning,
-                        );
-                    } else if lvls.is_empty() {
-                        self.create_error("Kein Level in Label Gefunden", MessageType::Warning);
-                    } else if lvls[0] < 1 || lvls[0] > 17 {
-                        self.create_error(
-                            "Level in Label nicht zwischen 1 und 17",
-                            MessageType::Warning,
-                        );
-                    }
-                }
-                if let (Some(start), Some(end)) = (self.current_rect_start, self.current_rect_end) {
-                    let rect = egui::Rect::from_two_pos(start, end).expand(2.0);
-                    self.labeled_rects.push(SmthLabeled::Rect(LabeledRect {
-                        rect,
-                        label: String::new(),
-                    }));
-
-                    self.current_rect_end = None;
-                    self.current_rect_start = None;
-                }
-            }
-
-            let pointer_down = ui.input(|i| i.pointer.secondary_down());
-            let pointer_clicked = ui.input(|i| i.pointer.secondary_clicked());
-            let pointer_released = ui.input(|i| i.pointer.secondary_released());
-
-            if pointer_clicked {
-                self.current_line_start = pointer_pos;
-                self.current_line_end = self.current_line_start;
-            }
             // Ziehen
-            if pointer_down {
+            if pointer_down2 {
                 if self.current_line_start.is_none() {
                     self.current_line_start = pointer_pos;
                 }
                 self.current_line_end = pointer_pos;
             }
-            // Loslassen
-            if pointer_released {
-                if let (Some(start), Some(end)) = (self.current_line_start, self.current_line_end) {
-                    let mut avg_divisons = vec![];
-                    for lsmth in self.labeled_rects.iter() {
-                        if let SmthLabeled::Line(li) = lsmth {
-                            let length = li.start.distance(li.end);
-                            avg_divisons.push(li.divisions as f32 / length);
-                        }
-                    }
+        }
+        // Loslassen
+        if pointer_released {
+            if let Some(SmthLabeled::Rect(r)) = self.labeled_rects.last() {
+                let lvls = ScreenshotApp::extract_numbers(&r.label);
 
-                    let divisions = if avg_divisons.len() != 0 {
-                        let avg_divisons_per_unit =
-                            avg_divisons.iter().sum::<f32>() / avg_divisons.len() as f32;
-
-                        let this_length = start.distance(end);
-
-                        let this_div = this_length * avg_divisons_per_unit;
-
-                        this_div as usize
-                    } else {
-                        0
-                    };
-
-                    self.labeled_rects.push(SmthLabeled::Line(LabeledLine {
-                        start,
-                        end,
-                        divisions,
-                        label: String::from("mauer"),
-                    }));
-
-                    self.current_line_end = None;
-                    self.current_line_start = None;
+                if lvls.len() > 1 {
+                    self.create_error("Mehr als ein Level in Label Gefunden", MessageType::Warning);
+                } else if lvls.is_empty() {
+                    self.create_error("Kein Level in Label Gefunden", MessageType::Warning);
+                } else if lvls[0] < 1 || lvls[0] > 17 {
+                    self.create_error(
+                        "Level in Label nicht zwischen 1 und 17",
+                        MessageType::Warning,
+                    );
                 }
+            }
+            if let (Some(start), Some(end)) = (self.current_rect_start, self.current_rect_end) {
+                let rect = egui::Rect::from_two_pos(start, end).expand(2.0);
+                self.labeled_rects.push(SmthLabeled::Rect(LabeledRect {
+                    rect,
+                    label: String::new(),
+                }));
+
+                self.current_rect_end = None;
+                self.current_rect_start = None;
+            }
+        }
+
+        // Loslassen
+        if pointer_released2 {
+            if let (Some(start), Some(end)) = (self.current_line_start, self.current_line_end) {
+                let mut avg_divisons = vec![];
+                for lsmth in self.labeled_rects.iter() {
+                    if let SmthLabeled::Line(li) = lsmth {
+                        let length = li.start.distance(li.end);
+                        avg_divisons.push(li.divisions as f32 / length);
+                    }
+                }
+
+                let divisions = if avg_divisons.len() != 0 {
+                    let avg_divisons_per_unit =
+                        avg_divisons.iter().sum::<f32>() / avg_divisons.len() as f32;
+
+                    let this_length = start.distance(end);
+
+                    let this_div = this_length * avg_divisons_per_unit;
+
+                    this_div as usize
+                } else {
+                    0
+                };
+
+                self.labeled_rects.push(SmthLabeled::Line(LabeledLine {
+                    start,
+                    end,
+                    divisions,
+                    label: String::from("mauer"),
+                }));
+
+                self.current_line_end = None;
+                self.current_line_start = None;
             }
         }
     }
