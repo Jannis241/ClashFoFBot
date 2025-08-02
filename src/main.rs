@@ -39,7 +39,7 @@ impl From<io::Error> for FofError {
 }
 
 fn main() {
-    split_image::split("images/lg.jpg", 9, "images/");
+    // split_image::split("images/lg.jpg", 9, "images/");
     ui::start_ui();
     // debug::run_tests();
 }
