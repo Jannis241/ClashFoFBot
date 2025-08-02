@@ -40,7 +40,7 @@ impl From<io::Error> for FofError {
 
 fn main() {
     // split_image::split(
-    //     "/Users/maus/Downloads/th_15.webp",
+    //     "/Users/maus/Downloads/th_13.webp",
     //     9,
     //     "/Users/maus/Downloads/splits",
     // );
