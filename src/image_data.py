@@ -48,7 +48,24 @@ def train_model(model_name, data_set_type, epochen):
         DATA_YAML = "dataset_buildings/data.yaml"
     else:
         DATA_YAML = "dataset_level/data.yaml"
-    model.train(data=DATA_YAML, epochs=epochen, name=model_name, exist_ok=True,augment=True)
+        #HARDCODE ALARM
+    model.train(data=DATA_YAML, epochs=300, patience=30, save_period=10, name=model_name, exist_ok=True,augment=True)
+
+    print("VALVALVALVALVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLVALAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVL")
+        #HARDCODE ALARM
+    model.val(
+    data=DATA_YAML,
+    conf=0.25,      # use a lower threshold
+        iou= 0.4,
+        visualize= True,
+    save=True,        # so you can view predictions
+            save_txt=True,
+    save_conf=True,
+        project="testvals",  # 🔹 your custom directory
+    name=f"val_run_{model_name}"            # 🔹 subfolder inside project
+)
+
+    print("VALVALVALVALVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLVALAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVL")
 
     print("Training erfolgreich abgeschlossen.")
 

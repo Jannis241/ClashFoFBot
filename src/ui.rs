@@ -81,8 +81,7 @@ impl AutoThread for TrainThread {
             self.request_start = false;
 
             thread::spawn(move || {
-                let result = image_data_wrapper::train_model(&model, 1);
-                dbg!(&result);
+                let result = image_data_wrapper::train_model(&model, 200);
                 *status_ref.lock().unwrap() = TrainStatus::Done(result);
             });
         }
