@@ -350,7 +350,13 @@ impl ScreenshotApp {
             "Ordner Wählen wo die Imgs die du Splitten willst gespeichert sind:",
         );
         self.update_image_list();
-        self.show_available_pngs_multiple(ui);
+
+        egui::ScrollArea::vertical()
+            .max_height(200.)
+            .show(ui, |ui: &mut egui::Ui| {
+                self.show_available_pngs_multiple(ui);
+            });
+
         ui.separator();
 
         ui.label("Number of splits (e.g. 4 = 2x2, 9 = 3x3):");
