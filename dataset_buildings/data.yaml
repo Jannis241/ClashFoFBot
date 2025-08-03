@@ -14,7 +14,7 @@ names:
   13: querschlägerkanone
   47: adlerartillerie
   3: magierturm
-  38: luftfeger
+  38: feger
   45: unsichtbarkeitszauberturm
   2: multibogenschützenturm
   20: bombenturm
@@ -40,7 +40,7 @@ names:
   26: königin
   25: bob
   11: bohrer
-  16: multientwicklungsturm
+  16: entwicklungsturm
   1: minenwerfer
   9: helferhütte
   6: duklerelexirbohrer

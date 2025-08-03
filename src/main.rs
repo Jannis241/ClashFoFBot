@@ -38,7 +38,50 @@ impl From<io::Error> for FofError {
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct YamlData {
+    train: String,
+    val: String,
+    names: HashMap<u32, String>,
+}
+
+fn check_unique_prefixes(class_names: &[String], prefix_len: usize) {
+    let mut prefix_map: HashMap<String, Vec<String>> = HashMap::new();
+
+    for name in class_names {
+        let prefix = name
+            .chars()
+            .take(prefix_len)
+            .collect::<String>()
+            .to_lowercase();
+        prefix_map.entry(prefix).or_default().push(name.clone());
+    }
+
+    let mut has_conflict = false;
+    for (prefix, names) in &prefix_map {
+        if names.len() > 1 {
+            has_conflict = true;
+            println!("❌ Konflikt beim Präfix '{}': {:?}", prefix, names);
+        }
+    }
+
+    if !has_conflict {
+        println!("✅ Alle Präfixe mit Länge {} sind eindeutig.", prefix_len);
+    }
+}
+
 fn main() {
+    let file_content =
+        fs::read_to_string("dataset_buildings/data.yaml").expect("Kann Datei nicht lesen");
+
+    let data: YamlData =
+        serde_yaml::from_str(&file_content).expect("Fehler beim Parsen der YAML-Datei");
+
+    let class_names: Vec<String> = data.names.values().cloned().collect();
+
+    let prefix_length = 6; // Anzahl der Buchstaben, die als Präfix geprüft werden
+    check_unique_prefixes(&class_names, prefix_length);
+
     // split_image::split(
     //     "/Users/maus/Downloads/th_13.webp",
     //     9,
