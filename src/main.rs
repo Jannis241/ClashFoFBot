@@ -79,7 +79,7 @@ fn main() {
 
     let class_names: Vec<String> = data.names.values().cloned().collect();
 
-    let prefix_length = 6; // Anzahl der Buchstaben, die als Präfix geprüft werden
+    let prefix_length = 3; // Anzahl der Buchstaben, die als Präfix geprüft werden
     check_unique_prefixes(&class_names, prefix_length);
 
     // split_image::split(
