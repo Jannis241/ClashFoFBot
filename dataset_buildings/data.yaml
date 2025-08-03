@@ -5,8 +5,8 @@ names:
   28: kaserne
   24: dunklekaserne
   39: zauberfabrik
-  22: wächter
-  27: könig
+  22: warden
+  27: king
   21: goldmine
   42: gigabombe
   43: mauer
@@ -27,9 +27,9 @@ names:
   46: kanone
   37: clanburg
   29: monolyth
-  19: bauarbeiterhütte
+  19: bauhütte
   30: goldlager
-  4: elexirsammler
+  4: sammler
   15: dunklezauberfabrik
   8: labor
   10: tesla
@@ -37,7 +37,7 @@ names:
   0: bogenschützenturm
   34: rathaus
   36: streukatapult
-  26: königin
+  26: queen
   25: bob
   11: bohrer
   16: entwicklungsturm
