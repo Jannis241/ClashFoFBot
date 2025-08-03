@@ -1,24 +1,5 @@
 Model tab:
-    random nummer an die gelabelten sachen packen damit es keine wiederholung an namen gibt
-
-    bei model testen einen button hinzufügen der auf drück ein neues fenster mit der prediction öffnet/anzeigtbei model testen einen button hinzufügen der auf drück ein neues fenster mit der prediction öffnet/anzeigt!
-
-    beim test bild vorher ruhig schon einer vorschau anzeigen, dass man sieht welches bild man ausgewählt hat.
-
-    bei den nachrichten an der seite noch die möglichkeit hinzufügen, dass man sie weg klicken kann
     ein tab wo man einen überblick über alle models hat.
     beim training ein paar daten anzeigen, dass man wirklich sieht wie trainiert (epochen anzeigen und vielleicht nach jeder epoche das rating aktualisieren und anzeigen.)
 
     (erstmal unwichtig) erstellen von einem model in eigenen thread
-
-    eine klare abtrennung zwischen dem tab wo man grade drinne ist (zb manage models) und den anderen (zb model trainieren)
-
-
-    bei model trainieren:
-        - wenn es nicht trainiert wird soll das model grau sein und nicht rot
-
-
-
-
-
-

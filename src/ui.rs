@@ -48,6 +48,7 @@ enum Tab {
     Settings,
     YoloLabel,
     Model,
+    Split,
 }
 
 use crate::threading::*;
@@ -148,6 +149,8 @@ impl threading::AutoThread for GetBuildingsThread {
 pub struct ScreenshotApp {
     screenshot_path: String,
     keybind: String,
+    split_count: i32,
+    preview_texture: Option<egui::TextureHandle>,
     selected_image: Option<String>,
     image_folder: Option<PathBuf>,
     available_images: Vec<String>,
@@ -164,7 +167,6 @@ pub struct ScreenshotApp {
     labeled_rects: Vec<SmthLabeled>,
     current_rect_start: Option<egui::Pos2>,
     current_rect_end: Option<egui::Pos2>,
-
     current_line_start: Option<egui::Pos2>,
     current_line_end: Option<egui::Pos2>,
     new_model_name: String,
@@ -298,6 +300,8 @@ impl Default for ScreenshotApp {
         let mut s = Self {
             current_avg_conf: None,
             current_buildings: None,
+            split_count: 1,
+            preview_texture: None,
             screenshot_path: "/home/jesko/programmieren/ClashFoFBot/images".to_string(),
             keybind: "r".to_string(),
             selected_image: None,
@@ -340,10 +344,152 @@ impl Default for ScreenshotApp {
 }
 
 impl ScreenshotApp {
+    fn split(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        self.ordner_wählen(
+            ui,
+            "Ordner Wählen wo die Imgs die du Splitten willst gespeichert sind:",
+        );
+        self.update_image_list();
+        self.show_available_pngs_multiple(ui);
+        ui.separator();
+
+        ui.label("Number of splits (e.g. 4 = 2x2, 9 = 3x3):");
+        ui.add(egui::DragValue::new(&mut self.split_count).clamp_range(1..=10000));
+
+        if ui.button("SPLITEN").clicked() {
+            if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                for img in self.selected_images.iter() {
+                    let save_path = ScreenshotApp::build_split_filename(img, path.clone());
+                    let res = fs::create_dir(&save_path);
+                    let _ = res.expect(
+                        "Wie konnte das passiereenenenenenene oi nein gelgelglegleglegflegl",
+                    );
+                    split_image::split(img, self.split_count, save_path.to_str().unwrap());
+                }
+
+                self.selected_images.clear();
+                self.split_count = 1;
+
+                self.create_error(
+                    format!("Ausgewählte Imgs Gesplittet",),
+                    MessageType::Success,
+                );
+            }
+        }
+
+        // If at least one image is selected, show the preview
+        if let Some(first_image_path) = self.selected_images.iter().next() {
+            // Only load once or when the path changes
+            if self.preview_texture.is_none() {
+                if let Ok(img) = image::open(first_image_path) {
+                    let size = [img.width() as usize, img.height() as usize];
+                    let rgba = img.to_rgba8();
+                    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, &rgba);
+                    self.preview_texture = Some(ui.ctx().load_texture(
+                        "preview",
+                        color_image,
+                        Default::default(),
+                    ));
+                }
+            }
+
+            if let Some(texture) = &self.preview_texture {
+                let (img, scale) = self.get_scaled_texture(ui, texture);
+                let img_size = img.size().unwrap() * scale;
+                let response = ui.add(img);
+
+                // Draw split grid
+                let painter = ui.painter_at(response.rect);
+                let parts = (self.split_count as f32).sqrt().floor() as i32;
+                if parts >= 1 {
+                    let part_width = img_size.x / parts as f32;
+                    let part_height = img_size.y / parts as f32;
+
+                    for i in 1..parts {
+                        // Vertical lines
+                        let x = response.rect.left_top().x + i as f32 * part_width;
+                        painter.line_segment(
+                            [
+                                egui::pos2(x, response.rect.top()),
+                                egui::pos2(x, response.rect.bottom()),
+                            ],
+                            egui::Stroke::new(1.0, egui::Color32::WHITE),
+                        );
+
+                        // Horizontal lines
+                        let y = response.rect.left_top().y + i as f32 * part_height;
+                        painter.line_segment(
+                            [
+                                egui::pos2(response.rect.left(), y),
+                                egui::pos2(response.rect.right(), y),
+                            ],
+                            egui::Stroke::new(1.0, egui::Color32::WHITE),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    pub fn build_split_filename(image_path: &str, folder: PathBuf) -> PathBuf {
+        let path = Path::new(image_path);
+
+        let file_stem = path.file_stem().unwrap_or_default().to_string_lossy();
+
+        folder.join(format!("{}_split", file_stem))
+    }
+
+    fn reverse_modified_filename(modified_path: &str) -> Option<String> {
+        let path = std::path::Path::new(modified_path);
+
+        // Get file name (e.g. "th17GELG1234567890.png")
+        let file_name = path.file_name()?.to_string_lossy();
+
+        // Separate the extension (e.g. ".png")
+        let extension = path.extension()?.to_string_lossy();
+
+        // Remove extension from file name
+        let stem_with_gelg = file_name.trim_end_matches(&format!(".{}", extension));
+
+        // Find the index of "GELG"
+        let gelg_index = stem_with_gelg.find("GELG")?;
+
+        // Get the original stem (everything before "GELG")
+        let original_stem = &stem_with_gelg[..gelg_index];
+
+        // Reconstruct original file name
+        let original_file_name = format!("{}.{}", original_stem, extension);
+
+        // Combine with the original parent path
+        let original_path = path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new(""))
+            .join(original_file_name);
+
+        Some(original_path.to_string_lossy().to_string())
+    }
+
     fn is_image_in_dataset(&self, filename: &str) -> bool {
-        let train_path = Path::new("dataset/images/train").join(filename);
-        let val_path = Path::new("dataset/images/val").join(filename);
-        train_path.exists() || val_path.exists()
+        fn file_matches(dir: &Path, original_filename: &str) -> bool {
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
+                        if let Some(restored) = ScreenshotApp::reverse_modified_filename(file_name)
+                        {
+                            if restored == original_filename {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            false
+        }
+
+        let train_path = Path::new("dataset_buildings/images/train");
+        let val_path = Path::new("dataset_buildings/images/val");
+
+        file_matches(train_path, filename) || file_matches(val_path, filename)
     }
 
     pub fn create_error(&mut self, msg: impl Into<String>, kind: MessageType) {
@@ -529,6 +675,12 @@ impl ScreenshotApp {
                 .clicked()
             {
                 self.active_tab = Tab::Model;
+            }
+            if ui
+                .selectable_label(self.active_tab == Tab::Split, "|Split|")
+                .clicked()
+            {
+                self.active_tab = Tab::Split;
             }
         });
     }
@@ -1344,6 +1496,7 @@ impl ScreenshotApp {
             let image_paths = image_path.split(".").collect::<Vec<&str>>();
             let mut stem = image_paths[0].to_string();
             let ending = ".".to_string() + image_paths[1];
+            stem.push_str("GELG");
             stem.push_str(rng.random_range(i128::MIN..i128::MAX).to_string().as_str());
             stem.push_str(&ending);
 
@@ -1769,6 +1922,9 @@ impl eframe::App for ScreenshotApp {
                 }
                 Tab::YoloLabel => {
                     self.yolo_label(ui, ctx);
+                }
+                Tab::Split => {
+                    self.split(ui, ctx);
                 }
             }
             self.update_err(ui, ctx);
