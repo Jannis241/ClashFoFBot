@@ -1282,7 +1282,12 @@ impl ScreenshotApp {
         let cursor_pos = ui.ctx().input(|i| i.pointer.hover_pos());
         let cursor_over_image = cursor_pos.map_or(false, |pos| rect.contains(pos));
 
-        let pointer_pos = ui.input(|i| i.pointer.hover_pos());
+        let mut pointer_pos = ui.input(|i| i.pointer.hover_pos());
+
+        if let Some(pos) = pointer_pos {
+            pointer_pos = Some(pos - rect.left_top().to_vec2());
+        }
+
         let pointer_down = ui.input(|i| i.pointer.primary_down());
         let pointer_clicked = ui.input(|i| i.pointer.primary_clicked());
         let pointer_released = ui.input(|i| i.pointer.primary_released());
@@ -1307,6 +1312,13 @@ impl ScreenshotApp {
                     self.current_rect_start = pointer_pos;
                 }
                 self.current_rect_end = pointer_pos;
+            }
+            // Ziehen
+            if pointer_down2 {
+                if self.current_line_start.is_none() {
+                    self.current_line_start = pointer_pos;
+                }
+                self.current_line_end = pointer_pos;
             }
         }
         // Loslassen
@@ -1336,13 +1348,7 @@ impl ScreenshotApp {
                 self.current_rect_start = None;
             }
         }
-        // Ziehen
-        if pointer_down2 {
-            if self.current_line_start.is_none() {
-                self.current_line_start = pointer_pos;
-            }
-            self.current_line_end = pointer_pos;
-        }
+
         // Loslassen
         if pointer_released2 {
             if let (Some(start), Some(end)) = (self.current_line_start, self.current_line_end) {
@@ -1425,15 +1431,6 @@ impl ScreenshotApp {
                     match event {
                         egui::Event::Text(text) => {
                             if text == " " {
-                                let trimmed = label.trim();
-                                let matches: Vec<&String> = class_names
-                                    .iter()
-                                    .filter(|name| name.starts_with(trimmed) && *name != trimmed)
-                                    .collect();
-
-                                if matches.len() == 1 {
-                                    r.set_label(matches[0].clone());
-                                }
                             } else if text == "+" || text == "-" {
                             } else {
                                 r.push_str_to_label(text);
@@ -1467,6 +1464,12 @@ impl ScreenshotApp {
 
                                 if matches.len() == 1 {
                                     r.set_label(matches[0].clone());
+                                } else {
+                                    let common_prefix =
+                                        ScreenshotApp::longest_common_prefix(&matches);
+                                    if common_prefix.len() > trimmed.len() {
+                                        r.set_label(common_prefix);
+                                    }
                                 }
                             }
                             _ => {}
@@ -1490,6 +1493,27 @@ impl ScreenshotApp {
                 _ => {}
             }
         }
+    }
+
+    fn longest_common_prefix(strings: &[&String]) -> String {
+        if strings.is_empty() {
+            return String::new();
+        }
+
+        let mut prefix = strings[0].as_str();
+
+        for s in strings.iter().skip(1) {
+            let mut i = 0;
+            while i < prefix.len() && i < s.len() && prefix.as_bytes()[i] == s.as_bytes()[i] {
+                i += 1;
+            }
+            prefix = &prefix[..i];
+            if prefix.is_empty() {
+                break;
+            }
+        }
+
+        prefix.to_string()
     }
 
     fn save_labeld_rects(&mut self, final_size: egui::Vec2) {
@@ -1642,6 +1666,7 @@ impl ScreenshotApp {
                         *id
                     } else if idx == 0 {
                         self.create_error("Label not found in buildings data.yaml!!! (was hat bro schon wieder getan)", MessageType::Error);
+                        println!("label that was not found: {}", extracted_label);
                         continue;
                     } else {
                         let new_id = data.names.len();
@@ -1713,7 +1738,7 @@ impl ScreenshotApp {
         }
     }
 
-    fn draw_rects(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+    fn draw_rects(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, img_rect: Rect) {
         // Rechtecke zeichnen
         let painter = ui.painter();
 
@@ -1724,10 +1749,14 @@ impl ScreenshotApp {
         }
 
         for (idx, lr) in all_labeled_rects.iter().enumerate() {
-            painter.rect_stroke(lr.rect, 0.0, (2.0, egui::Color32::RED), StrokeKind::Middle);
+            let new_rect = Rect::from_two_pos(
+                lr.rect.left_top() + img_rect.left_top().to_vec2(),
+                lr.rect.right_bottom() + img_rect.left_top().to_vec2(),
+            );
+            painter.rect_stroke(new_rect, 0.0, (2.0, egui::Color32::RED), StrokeKind::Middle);
             if idx + 1 == all_labeled_rects.len() {
                 painter.text(
-                    lr.rect.left_top(),
+                    lr.rect.left_top() + img_rect.left_top().to_vec2(),
                     egui::Align2::LEFT_TOP,
                     &lr.label,
                     egui::TextStyle::Body.resolve(&ctx.style()),
@@ -1737,12 +1766,21 @@ impl ScreenshotApp {
         }
 
         if let (Some(start), Some(current)) = (self.current_rect_start, self.current_rect_end) {
-            let rect = egui::Rect::from_two_pos(start, current);
+            let rect = egui::Rect::from_two_pos(
+                start + img_rect.left_top().to_vec2(),
+                current + img_rect.left_top().to_vec2(),
+            );
             painter.rect_stroke(rect, 0.0, (1.0, egui::Color32::GREEN), StrokeKind::Middle);
         }
 
         if let (Some(start), Some(current)) = (self.current_line_start, self.current_line_end) {
-            painter.line_segment([start, current], (1.0, egui::Color32::GREEN));
+            painter.line_segment(
+                [
+                    start + img_rect.left_top().to_vec2(),
+                    current + img_rect.left_top().to_vec2(),
+                ],
+                (1.0, egui::Color32::GREEN),
+            );
         }
     }
 
@@ -1900,7 +1938,7 @@ impl ScreenshotApp {
                         self.image_texture = None;
                     }
 
-                    self.draw_rects(ui, ctx);
+                    self.draw_rects(ui, ctx, rect);
                 }
             } else {
                 ui.label("Kein Bild ausgewählt.");
