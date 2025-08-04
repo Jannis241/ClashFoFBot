@@ -66,28 +66,59 @@ enum TrainStatus {
 struct TrainThread {
     model_name: String,
     status: Arc<Mutex<TrainStatus>>,
-    request_start: bool,
+    request_start: Arc<Mutex<bool>>,
     epochen: Option<usize>,
     stop: Arc<Mutex<bool>>,
+    auto_restart: Arc<AtomicBool>,
 }
 
 impl AutoThread for TrainThread {
     fn run(&mut self) {
-        let mut status = self.status.lock().unwrap();
+        // Check if training was requested
+        let should_start = {
+            let mut start_flag = self.request_start.lock().unwrap();
+            if *start_flag {
+                *start_flag = false; // reset it immediately
+                true
+            } else {
+                false
+            }
+        };
 
-        if self.request_start {
+        if should_start {
             let model = self.model_name.clone();
-            let status_ref = self.status.clone();
-            let stop_ref = self.stop.clone();
-            let epochen = self.epochen.expect("wie kann man so dumm sein???") as i32;
+            let status_ref = Arc::clone(&self.status);
+            let stop_ref = Arc::clone(&self.stop);
+            let request_start_ref = Arc::clone(&self.request_start);
+            let epochen = self.epochen.expect("Epochen not set!") as i32;
+            let auto_restart = Arc::clone(&self.auto_restart);
 
-            *status = TrainStatus::Running;
-            self.request_start = false;
+            // Set status to Running
+            {
+                let mut status = status_ref.lock().unwrap();
+                *status = TrainStatus::Running;
+            }
 
+            // Spawn training thread
             thread::spawn(move || {
+                dbg!("starting");
                 let result = image_data_wrapper::train_model(&model, epochen);
-                *status_ref.lock().unwrap() = TrainStatus::Done(result);
-                *stop_ref.lock().unwrap() = true;
+
+                {
+                    let mut status = status_ref.lock().unwrap();
+                    *status = TrainStatus::Done(result);
+                }
+
+                if auto_restart.load(Ordering::SeqCst) {
+                    let mut start_again = request_start_ref.lock().unwrap();
+                    *start_again = true;
+
+                    dbg!("auto starting..");
+                } else {
+                    dbg!("stopping");
+                    let mut stop = stop_ref.lock().unwrap();
+                    *stop = true;
+                }
             });
         }
 
@@ -97,12 +128,39 @@ impl AutoThread for TrainThread {
     }
 
     fn handle_field_set(&mut self, field: &str, value: Box<dyn Any + Send>) {
-        auto_set_field!(self, field, value, {
-            "start_training" => request_start: bool,
-            "model_name" => model_name: String,
-            "epochen" => epochen: Option<usize>,
-            "stop" => stop: Arc<Mutex<bool>>
-        });
+        match field {
+            "auto_restart" => {
+                if let Ok(val) = value.downcast::<bool>() {
+                    self.auto_restart.store(*val, Ordering::SeqCst);
+                    return;
+                }
+            }
+            "request_start" => {
+                if let Ok(val) = value.downcast::<Arc<Mutex<bool>>>() {
+                    self.request_start = *val;
+                    return;
+                }
+            }
+            "model_name" => {
+                if let Ok(val) = value.downcast::<String>() {
+                    self.model_name = *val;
+                    return;
+                }
+            }
+            "epochen" => {
+                if let Ok(val) = value.downcast::<Option<usize>>() {
+                    self.epochen = *val;
+                    return;
+                }
+            }
+            "stop" => {
+                if let Ok(val) = value.downcast::<Arc<Mutex<bool>>>() {
+                    self.stop = *val;
+                    return;
+                }
+            }
+            _ => {}
+        }
     }
 
     fn handle_field_get(&self, field: &str) -> Option<Box<dyn Any + Send>> {
@@ -110,7 +168,8 @@ impl AutoThread for TrainThread {
             "model_name" => model_name: String,
             "status" => status: Arc<Mutex<TrainStatus>>,
             "stop" => stop: Arc<Mutex<bool>>,
-            "epochen" => epochen: Option<usize>
+            "epochen" => epochen: Option<usize>,
+            "auto_restart" => auto_restart: Arc<AtomicBool>
         })
     }
 }
@@ -120,9 +179,10 @@ impl TrainThread {
         Self {
             model_name,
             status: Arc::new(Mutex::new(TrainStatus::Idle)),
-            request_start: true, // direkt starten!
+            request_start: Arc::new(Mutex::new(true)), // direkt starten!
             epochen: Some(epochen),
             stop: Arc::new(Mutex::new(false)),
+            auto_restart: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -1266,6 +1326,13 @@ impl ScreenshotApp {
                 if thrd.poll_field::<String>("model_name") == self.selected_model
                     && self.selected_model.is_some()
                 {
+                    if let Some(auto_restart) = thrd.poll_field::<Arc<AtomicBool>>("auto_restart") {
+                        let mut auto_restart = auto_restart.load(Ordering::SeqCst);
+                        if ui.checkbox(&mut auto_restart, "Auto Neustart: ").changed() {
+                            thrd.set_field("auto_restart", auto_restart);
+                        }
+                    }
+
                     if thrd.is_running() {
                         let text = "Stop Training";
                         if ui
@@ -1276,6 +1343,8 @@ impl ScreenshotApp {
                             .clicked()
                         {
                             thrd.set_field("stop", Arc::new(Mutex::new(true)));
+                            //HARDCODE ALARM!!!
+                            thrd.set_field("auto_restart", false);
                             self.create_error("Training gestoppt", MessageType::Success);
                         }
                         return;

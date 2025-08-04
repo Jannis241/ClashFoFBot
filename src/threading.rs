@@ -1,5 +1,6 @@
 use std::{
     any::Any,
+    fmt::Debug,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::{channel, Receiver, Sender},
@@ -141,8 +142,7 @@ impl<T: AutoThread> WorkerHandle<T> {
         let _ = self.input_tx.send((key.to_string(), Box::new(value), None));
     }
 
-    pub fn poll_field<U: Any + Send + Clone>(&self, key: &str) -> Option<U> {
-        // 2. Pending check
+    pub fn poll_field<U: Any + Send + Clone + Debug>(&self, key: &str) -> Option<U> {
         let mut pending = self.pending_rx.lock().unwrap();
         if let Some(rx) = pending.get(key) {
             match rx.try_recv() {
