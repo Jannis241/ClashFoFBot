@@ -33,6 +33,8 @@ def create_new_model(model_name, data_set_type, yolo_model):
     model = YOLO(yolo_model)
     if data_set_type == "buildings":
         DATA_YAML = "dataset_buildings/data.yaml"
+    elif data_set_type == "mauern":
+        DATA_YAML = "dataset_mauern/data.yaml"
     else:
         DATA_YAML = "dataset_level/data.yaml"
     model.train(data=DATA_YAML, epochs=1, name=model_name, augment=True)
@@ -45,13 +47,16 @@ def train_model(model_name, data_set_type, epochen):
     model = YOLO(model_path)
     if data_set_type == "buildings":
         DATA_YAML = "dataset_buildings/data.yaml"
+    elif data_set_type == "mauern":
+        DATA_YAML = "dataset_mauern/data.yaml"
     else:
         DATA_YAML = "dataset_level/data.yaml"
 
 
+
     model.train(
     data=DATA_YAML,
-    epochs=1000,
+    epochs=epochen,
     imgsz=960,                 # Reicht meistens, 1280 wäre overkill
     batch=8,                   # je nach VRAM
     optimizer="AdamW",

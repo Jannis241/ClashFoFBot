@@ -919,6 +919,7 @@ impl ScreenshotApp {
                         match model.dataset_type {
                             image_data_wrapper::DatasetType::Buildings => "🏗️ Building Model",
                             image_data_wrapper::DatasetType::Level => "🎯 Level Model",
+                            image_data_wrapper::DatasetType::Mauern => "Mauern Model",
                         }
                     );
 
@@ -965,6 +966,7 @@ impl ScreenshotApp {
                     None => "Nicht ausgewählt",
                     Some(image_data_wrapper::DatasetType::Buildings) => "Building Model",
                     Some(image_data_wrapper::DatasetType::Level) => "Level Model",
+                    Some(image_data_wrapper::DatasetType::Mauern) => "Mauern Model",
                 })
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
@@ -976,6 +978,11 @@ impl ScreenshotApp {
                         &mut self.dataset_mode,
                         Some(image_data_wrapper::DatasetType::Level),
                         "Level Model",
+                    );
+                    ui.selectable_value(
+                        &mut self.dataset_mode,
+                        Some(image_data_wrapper::DatasetType::Mauern),
+                        "Mauern Model",
                     );
                 });
 
@@ -1235,6 +1242,7 @@ impl ScreenshotApp {
                             match model.dataset_type {
                                 image_data_wrapper::DatasetType::Buildings => "🏗️ Building Model",
                                 image_data_wrapper::DatasetType::Level => "🎯 Level Model",
+                                image_data_wrapper::DatasetType::Mauern => "Mauern Model",
                             }
                         );
 
@@ -1519,6 +1527,8 @@ impl ScreenshotApp {
                                     .filter(|name| name.starts_with(trimmed) && *name != trimmed)
                                     .collect();
 
+                                dbg!(&matches);
+
                                 if matches.len() == 1 {
                                     r.set_label(matches[0].clone());
                                 } else {
@@ -1604,6 +1614,7 @@ impl ScreenshotApp {
 
             let dataset_paths = [
                 ("dataset_buildings", Regex::new(r"\D+").unwrap()), // Nur Buchstaben
+                ("dataset_mauern", Regex::new(r"\D+").unwrap()),    // Nur Buchstaben
                 ("dataset_level", Regex::new(r"\d+").unwrap()),     // Nur Ziffern
             ];
 
@@ -1706,7 +1717,17 @@ impl ScreenshotApp {
                 let mut all_labeled_rects = vec![];
 
                 for lr in self.labeled_rects.clone().iter() {
-                    all_labeled_rects.append(&mut lr.get_rects());
+                    if idx == 0 {
+                        if let SmthLabeled::Rect(_) = lr {
+                            all_labeled_rects.append(&mut lr.get_rects());
+                        }
+                    } else if idx == 1 {
+                        if let SmthLabeled::Line(_) = lr {
+                            all_labeled_rects.append(&mut lr.get_rects());
+                        }
+                    } else {
+                        all_labeled_rects.append(&mut lr.get_rects());
+                    }
                 }
 
                 for lr in all_labeled_rects.iter() {
@@ -1721,7 +1742,8 @@ impl ScreenshotApp {
 
                     let class_id = if let Some(id) = class_map.get(&extracted_label) {
                         *id
-                    } else if idx == 0 {
+                    } else if true {
+                        //jetzt erstmal keine neuen class_ids zu data.yaml hinzufügen
                         self.create_error("Label not found in buildings data.yaml!!! (was hat bro schon wieder getan)", MessageType::Error);
                         println!("label that was not found: {}", extracted_label);
                         continue;

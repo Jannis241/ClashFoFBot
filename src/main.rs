@@ -70,6 +70,10 @@ fn check_unique_prefixes(class_names: &[String], prefix_len: usize) {
     }
 }
 
+use std::fs::{self, File};
+use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
+
 fn main() {
     let file_content =
         fs::read_to_string("dataset_buildings/data.yaml").expect("Kann Datei nicht lesen");
