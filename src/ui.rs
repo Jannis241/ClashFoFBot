@@ -67,47 +67,62 @@ struct TrainThread {
     model_name: String,
     status: Arc<Mutex<TrainStatus>>,
     request_start: bool,
+    epochen: Option<usize>,
+    stop: Arc<Mutex<bool>>,
 }
 
 impl AutoThread for TrainThread {
     fn run(&mut self) {
         let mut status = self.status.lock().unwrap();
 
-        if matches!(*status, TrainStatus::Idle | TrainStatus::Done(_)) {
+        if self.request_start {
             let model = self.model_name.clone();
             let status_ref = self.status.clone();
+            let stop_ref = self.stop.clone();
+            let epochen = self.epochen.expect("wie kann man so dumm sein???") as i32;
 
             *status = TrainStatus::Running;
             self.request_start = false;
 
             thread::spawn(move || {
-                let result = image_data_wrapper::train_model(&model, 200);
+                let result = image_data_wrapper::train_model(&model, epochen);
                 *status_ref.lock().unwrap() = TrainStatus::Done(result);
+                *stop_ref.lock().unwrap() = true;
             });
+        }
+
+        if *self.stop.lock().unwrap() {
+            // image_data_wrapper::stop_training(self.model_name);
         }
     }
 
     fn handle_field_set(&mut self, field: &str, value: Box<dyn Any + Send>) {
         auto_set_field!(self, field, value, {
             "start_training" => request_start: bool,
-            "model_name" => model_name: String
+            "model_name" => model_name: String,
+            "epochen" => epochen: Option<usize>,
+            "stop" => stop: Arc<Mutex<bool>>
         });
     }
 
     fn handle_field_get(&self, field: &str) -> Option<Box<dyn Any + Send>> {
         auto_get_field!(self, field, {
             "model_name" => model_name: String,
-            "status" => status: Arc<Mutex<TrainStatus>>
+            "status" => status: Arc<Mutex<TrainStatus>>,
+            "stop" => stop: Arc<Mutex<bool>>,
+            "epochen" => epochen: Option<usize>
         })
     }
 }
 
 impl TrainThread {
-    fn new(model_name: String) -> Self {
+    fn new(model_name: String, epochen: usize) -> Self {
         Self {
             model_name,
             status: Arc::new(Mutex::new(TrainStatus::Idle)),
             request_start: true, // direkt starten!
+            epochen: Some(epochen),
+            stop: Arc::new(Mutex::new(false)),
         }
     }
 }
@@ -173,6 +188,7 @@ pub struct ScreenshotApp {
     current_models: Vec<image_data_wrapper::Model>,
     in_test_mode: bool,
     current_avg_conf: Option<f32>,
+    current_epochen: String,
 }
 
 // Wie stark sich Rechtecke überlappen (0.0 = kein Overlap, 0.5 = 50% Overlap)
@@ -334,6 +350,7 @@ impl Default for ScreenshotApp {
             dataset_mode: None, // Standardwert
             current_models: vec![],
             in_test_mode: false,
+            current_epochen: "".to_string(),
         };
 
         s.reload_models();
@@ -1160,6 +1177,24 @@ impl ScreenshotApp {
     }
 
     fn model_training(&mut self, ui: &mut egui::Ui) {
+        let mut idxes_to_remove = vec![];
+
+        for (idx, thrd) in self.train_threads.iter().enumerate() {
+            let thrd_model_name = thrd.poll_field::<String>("model_name");
+
+            if let Some(wi) = thrd.poll_field::<Arc<Mutex<bool>>>("stop") {
+                let should_stop = *wi.lock().unwrap();
+                println!("name: {:?}, should_stop: {}", thrd_model_name, should_stop);
+                if should_stop {
+                    idxes_to_remove.push(idx);
+                }
+            }
+        }
+
+        for idx in idxes_to_remove {
+            let t = self.train_threads.remove(idx);
+            t.stop();
+        }
         ui.collapsing("Training", |ui: &mut egui::Ui| {
             self.current_models.sort_by(|a, b| {
                 a.rating
@@ -1178,7 +1213,24 @@ impl ScreenshotApp {
                         let score = model.rating;
                         let name = model.name.clone();
 
-                        let label = format!(
+                        let mut is_training = false;
+                        let mut epochs = None;
+
+                        let m = Some(model.name);
+
+                        for (idx, thrd) in self.train_threads.iter().enumerate() {
+                            let thrd_model_name = thrd.poll_field::<String>("model_name");
+                            if m == thrd_model_name {
+                                if thrd.is_running() {
+                                    is_training = true;
+                                    if let Some(eps) = thrd.poll_field::<Option<usize>>("epochen") {
+                                        epochs = eps;
+                                    }
+                                }
+                            }
+                        }
+
+                        let mut label = format!(
                             "{name} ({score:.2}) Typ: {}",
                             match model.dataset_type {
                                 image_data_wrapper::DatasetType::Buildings => "🏗️ Building Model",
@@ -1186,16 +1238,8 @@ impl ScreenshotApp {
                             }
                         );
 
-                        let mut is_training = false;
-
-                        let m = Some(model.name);
-
-                        for thrd in self.train_threads.iter() {
-                            if m == thrd.poll_field::<String>("model_name") {
-                                if thrd.is_running() {
-                                    is_training = true;
-                                }
-                            }
+                        if let Some(eps) = epochs {
+                            label.push_str(format!(" (Trainiert für {} epochen)", eps).as_str());
                         }
 
                         if ui
@@ -1204,7 +1248,7 @@ impl ScreenshotApp {
                                 RichText::new(label).color(if is_training {
                                     Color32::YELLOW
                                 } else {
-                                    Color32::RED
+                                    Color32::GRAY
                                 }),
                             )
                             .clicked()
@@ -1215,7 +1259,7 @@ impl ScreenshotApp {
                     }
                 });
 
-            for (idx, thrd) in self.train_threads.iter_mut().enumerate() {
+            for thrd in self.train_threads.iter_mut() {
                 if thrd.poll_field::<String>("model_name") == self.selected_model
                     && self.selected_model.is_some()
                 {
@@ -1228,8 +1272,7 @@ impl ScreenshotApp {
                             )
                             .clicked()
                         {
-                            let t = self.train_threads.remove(idx);
-                            t.stop();
+                            thrd.set_field("stop", Arc::new(Mutex::new(true)));
                             self.create_error("Training gestoppt", MessageType::Success);
                         }
                         return;
@@ -1241,6 +1284,13 @@ impl ScreenshotApp {
                 return;
             }
 
+            ui.horizontal(|ui| {
+                ui.label("epochen:");
+                ui.text_edit_singleline(&mut self.current_epochen);
+            });
+
+            let res = self.current_epochen.trim().parse::<usize>();
+
             let text = "Start Training";
             if ui
                 .add(
@@ -1249,8 +1299,16 @@ impl ScreenshotApp {
                 )
                 .clicked()
             {
+                if let Err(e) = res {
+                    self.create_error(
+                        format!("Falsche angabe der epochen: {:?}", e),
+                        MessageType::Error,
+                    );
+                    return;
+                }
+
                 let wrkh = WorkerHandle::start(
-                    TrainThread::new(self.selected_model.clone().unwrap()),
+                    TrainThread::new(self.selected_model.clone().unwrap(), res.unwrap()),
                     true,
                 );
                 self.train_threads.push(wrkh);

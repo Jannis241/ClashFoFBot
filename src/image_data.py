@@ -49,14 +49,14 @@ def train_model(model_name, data_set_type, epochen):
     else:
         DATA_YAML = "dataset_level/data.yaml"
         #HARDCODE ALARM
-    model.train(data=DATA_YAML, epochs=300, patience=30, save_period=10, name=model_name, exist_ok=True,augment=True)
+    model.train(data=DATA_YAML, epochs=epochen, name=model_name, exist_ok=True,augment=True)
 
     print("VALVALVALVALVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLVALAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVL")
         #HARDCODE ALARM
     model.val(
     data=DATA_YAML,
-    conf=0.25,      # use a lower threshold
-        iou= 0.4,
+    conf=0.35,      # use a lower threshold
+        iou= 0.2,
         visualize= True,
     save=True,        # so you can view predictions
             save_txt=True,
