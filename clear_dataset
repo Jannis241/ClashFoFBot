@@ -13,11 +13,6 @@ find dataset_level/images/val -type f ! -name '.*' -delete
 find dataset_level/labels/train -type f ! -name '.*' -delete
 find dataset_level/labels/val -type f ! -name '.*' -delete
 
-find dataset_mauern/images/train -type f ! -name '.*' -delete
-find dataset_mauern/images/val -type f ! -name '.*' -delete
-
-find dataset_mauern/labels/train -type f ! -name '.*' -delete
-find dataset_mauern/labels/val -type f ! -name '.*' -delete
 
 
 # rm -rf dataset_level/data.yaml
@@ -33,10 +28,6 @@ rm -rf dataset_level/labels/val.cache
 rm -rf dataset_level/images/train.cache
 rm -rf dataset_level/images/val.cache
 
-rm -rf dataset_mauern/labels/train.cache
-rm -rf dataset_mauern/labels/val.cache
-rm -rf dataset_mauern/images/train.cache
-rm -rf dataset_mauern/images/val.cache
 
 # cp default_data.yaml dataset_level/data.yaml
 # cp default_data.yaml dataset_buildings/data.yaml
