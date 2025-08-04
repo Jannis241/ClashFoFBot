@@ -91,6 +91,6 @@ fn main() {
     //     9,
     //     "/Users/maus/Downloads/splits",
     // );
-    // ui::start_ui();
-    debug::run_tests();
+    ui::start_ui();
+    // debug::run_tests();
 }

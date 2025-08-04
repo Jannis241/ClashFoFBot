@@ -979,7 +979,6 @@ impl ScreenshotApp {
                         match model.dataset_type {
                             image_data_wrapper::DatasetType::Buildings => "🏗️ Building Model",
                             image_data_wrapper::DatasetType::Level => "🎯 Level Model",
-                            image_data_wrapper::DatasetType::Mauern => "Mauern Model",
                         }
                     );
 
@@ -1026,7 +1025,6 @@ impl ScreenshotApp {
                     None => "Nicht ausgewählt",
                     Some(image_data_wrapper::DatasetType::Buildings) => "Building Model",
                     Some(image_data_wrapper::DatasetType::Level) => "Level Model",
-                    Some(image_data_wrapper::DatasetType::Mauern) => "Mauern Model",
                 })
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
@@ -1038,11 +1036,6 @@ impl ScreenshotApp {
                         &mut self.dataset_mode,
                         Some(image_data_wrapper::DatasetType::Level),
                         "Level Model",
-                    );
-                    ui.selectable_value(
-                        &mut self.dataset_mode,
-                        Some(image_data_wrapper::DatasetType::Mauern),
-                        "Mauern Model",
                     );
                 });
 
@@ -1247,6 +1240,9 @@ impl ScreenshotApp {
         let mut idxes_to_remove = vec![];
 
         for (idx, thrd) in self.train_threads.iter().enumerate() {
+            let _ = thrd.poll_field::<String>("model_name");
+            //dummy call damit der thrd sich aufwärmen kann (bro ist 60)
+
             if let Some(wi) = thrd.poll_field::<Arc<Mutex<bool>>>("stop") {
                 let should_stop = *wi.lock().unwrap();
                 if should_stop {
@@ -1297,7 +1293,6 @@ impl ScreenshotApp {
                             match model.dataset_type {
                                 image_data_wrapper::DatasetType::Buildings => "🏗️ Building Model",
                                 image_data_wrapper::DatasetType::Level => "🎯 Level Model",
-                                image_data_wrapper::DatasetType::Mauern => "Mauern Model",
                             }
                         );
 
@@ -1678,7 +1673,6 @@ impl ScreenshotApp {
 
             let dataset_paths = [
                 ("dataset_buildings", Regex::new(r"\D+").unwrap()), // Nur Buchstaben
-                ("dataset_mauern", Regex::new(r"\D+").unwrap()),    // Nur Buchstaben
                 ("dataset_level", Regex::new(r"\d+").unwrap()),     // Nur Ziffern
             ];
 
@@ -1781,17 +1775,7 @@ impl ScreenshotApp {
                 let mut all_labeled_rects = vec![];
 
                 for lr in self.labeled_rects.clone().iter() {
-                    if idx == 0 {
-                        if let SmthLabeled::Rect(_) = lr {
-                            all_labeled_rects.append(&mut lr.get_rects());
-                        }
-                    } else if idx == 1 {
-                        if let SmthLabeled::Line(_) = lr {
-                            all_labeled_rects.append(&mut lr.get_rects());
-                        }
-                    } else {
-                        all_labeled_rects.append(&mut lr.get_rects());
-                    }
+                    all_labeled_rects.append(&mut lr.get_rects());
                 }
 
                 for lr in all_labeled_rects.iter() {

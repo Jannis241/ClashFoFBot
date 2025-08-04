@@ -7,7 +7,6 @@ use crate::prelude::*;
 pub enum DatasetType {
     Buildings,
     Level,
-    Mauern,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -140,9 +139,6 @@ fn get_dataset_type(name: &str) -> Result<DatasetType, FofError> {
     } else if data_field.starts_with("dataset_level/") {
         println!("Found dataset_level for {}", name);
         Ok(DatasetType::Level)
-    } else if data_field.starts_with("dataset_mauern/") {
-        println!("Found dataset_level for {}", name);
-        Ok(DatasetType::Mauern)
     } else {
         eprintln!("Error: wasnt able to figure data set for {} out.", name);
         Err(FofError::UnsupportedDataset(data_field))
@@ -267,7 +263,6 @@ pub fn create_model(
     let t = match dataset_type {
         DatasetType::Level => "level",
         DatasetType::Buildings => "buildings",
-        DatasetType::Mauern => "mauern",
     };
 
     println!("Parsing YOLO base model..");
@@ -345,7 +340,6 @@ pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
     let dataset_type = match dataset_type {
         DatasetType::Level => "level",
         DatasetType::Buildings => "buildings",
-        DatasetType::Mauern => "mauern",
     };
 
     println!(
