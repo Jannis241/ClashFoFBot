@@ -28,7 +28,8 @@ target
 
 
 # temp
-# /runs
+/runs
+/testvals
 # /dataset
 # /images
 # /todo.txt
@@ -53,5 +54,9 @@ __pycache__/
 *.swp
 
 
-yolov*
+yolov8m.pt
+yolov8s.pt
+yolov8n.pt
+yolov8l.pt
+yolov8x.pt
 

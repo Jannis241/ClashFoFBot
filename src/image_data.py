@@ -2,21 +2,19 @@ import json
 import os
 from ultralytics import YOLO
 import argparse
-import cv2
-import pytesseract
+# import cv2
+# import pytesseract
 
-
-
-def read_number(path):
-    img = cv2.imread(path)
-
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
-
-    custom_config = r'--oem 3 --psm 6 outputbase digits'
-    text = pytesseract.image_to_string(thresh, config=custom_config)
-
-    return text
+# def read_number(path):
+#     img = cv2.imread(path)
+#
+#     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+#     _, thresh = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
+#
+#     custom_config = r'--oem 3 --psm 6 outputbase digits'
+#     text = pytesseract.image_to_string(thresh, config=custom_config)
+#
+#     return text
 
 
 
@@ -41,6 +39,7 @@ def create_new_model(model_name, data_set_type, yolo_model):
     print(f"Erstellung von '{model_name}'abgeschlossen. Das Modell findest du unter 'runs/detect/{model_name}/weights/best.pt'")
 
 def train_model(model_name, data_set_type, epochen):
+    print("Starte Training.")
     model_path = f"runs/detect/{model_name}/weights/best.pt"
 
     model = YOLO(model_path)
@@ -48,24 +47,60 @@ def train_model(model_name, data_set_type, epochen):
         DATA_YAML = "dataset_buildings/data.yaml"
     else:
         DATA_YAML = "dataset_level/data.yaml"
-        #HARDCODE ALARM
-    model.train(data=DATA_YAML, epochs=epochen, name=model_name, exist_ok=True,augment=True)
 
-    print("VALVALVALVALVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLVALAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVL")
-        #HARDCODE ALARM
+
+    model.train(
+    data=DATA_YAML,
+    epochs=1000,
+    imgsz=960,                 # Reicht meistens, 1280 wäre overkill
+    batch=8,                   # je nach VRAM
+    optimizer="AdamW",
+    lr0=0.001,
+    lrf=0.01,
+    weight_decay=0.0005,
+    patience=100, #erstmal soll er undendlich lang trainieren
+    warmup_epochs=100,
+    pretrained=True,
+    #  device=0, # geht nicht auf mac
+
+    # Augmentation (angepasst!):
+    hsv_h=0.0,                 # Keine Farbanpassung!
+    hsv_s=0.0,
+    hsv_v=0.0,
+    degrees=0.0,               # Keine Rotation nötig
+    translate=0.05,            # Leichte Verschiebung erlaubt
+    scale=0.9,                 # Wenig Skalierung
+    shear=0.0,                 # Keine Scherung
+    perspective=0.0,           # Keine Verzerrung
+    flipud=0.0,                # Kein vertikales Flip
+    fliplr=0.2,                # Nur horizontales Flip (wenn sinnvoll)
+    mosaic=0.5,                # Optional – hilft evtl. bei Generalisierung
+    mixup=0.0,                 # Nicht sinnvoll bei UI-Bildern
+    copy_paste=0.0,            # Ebenfalls ungeeignet
+
+    save_period=10,
+    exist_ok=True,
+    val=True,
+    project="runs/detect",
+    name=model_name,
+    )
+
+
     model.val(
     data=DATA_YAML,
-    conf=0.35,      # use a lower threshold
-        iou= 0.2,
-        visualize= True,
-    save=True,        # so you can view predictions
-            save_txt=True,
+    conf=0.3,
+    imgsz=960,
+    iou= 0.5,
+    visualize= True,
+    save=True,
+    save_txt=True,
     save_conf=True,
-        project="testvals",  # 🔹 your custom directory
-    name=f"val_run_{model_name}"            # 🔹 subfolder inside project
-)
-
-    print("VALVALVALVALVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLVALAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVLAVL")
+    project="testvals",
+    name=f"val_run_{model_name}",
+    batch=16,
+    plots=True,
+    verbose=True,
+    )
 
     print("Training erfolgreich abgeschlossen.")
 
@@ -118,10 +153,6 @@ args = parser.parse_args()
 
 epochs = args.epochs
 
-if args.zahl_erkennen:
-    text = read_number(args.path)
-    with open("Communication/number.txt", 'w', encoding='utf-8') as f:
-        f.write(text)
 
 if args.create_model:
     create_new_model(args.model_name, args.dataset_type, args.base)
@@ -129,6 +160,7 @@ if args.create_model:
 
 if args.train:
     train_model(args.model_name, args.dataset_type, epochs)
+
 
 if args.predict:
     write_prediction_to_json(args.model_name, "Communication/screenshot.png")

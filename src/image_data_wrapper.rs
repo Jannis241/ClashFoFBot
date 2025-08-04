@@ -39,115 +39,35 @@ impl Model {
     }
 }
 
-pub struct TrainingStats {
-    pub trained_epochen: i32,
-    pub start_rating: f64,
-    pub avg_time_per_epoche: OffsetDateTime,
-    pub avg_improvement_per_epoche: f64,
-    pub avg_improvement_per_hour: f64,
-    pub current_rating: f64,
-    pub rating_improvement: f64,
-    pub start_time: OffsetDateTime,
-    pub current_time: OffsetDateTime,
-    pub trainings_dauer: OffsetDateTime,
-}
-
-pub struct ModelStats {
-    pub num_of_finished_trainings: i32,
-    pub overall_training_time: OffsetDateTime,
-    pub num_of_trained_epochen: i32,
-    pub current_rating: i32,
-    pub avg_rating_improvement_per_trainign: f64,
-    pub avg_rating_improvement_per_hour: f64,
-    pub avg_rating_improvement_per_epoche: f64,
-    pub avg_time_per_epoche: OffsetDateTime,
-}
-
-impl ModelStats {
-    fn new(
-        num_of_finished_trainings: i32,
-        overall_training_time: OffsetDateTime,
-        num_of_trained_epochen: i32,
-        current_rating: i32,
-        avg_rating_improvement_per_trainign: f64,
-        avg_rating_improvement_per_hour: f64,
-        avg_rating_improvement_per_epoche: f64,
-        avg_time_per_epoche: OffsetDateTime,
-    ) -> Self {
-        Self {
-            num_of_finished_trainings,
-            overall_training_time,
-            num_of_trained_epochen,
-            current_rating,
-            avg_rating_improvement_per_trainign,
-            avg_rating_improvement_per_hour,
-            avg_rating_improvement_per_epoche,
-            avg_time_per_epoche,
-        }
-    }
-}
-
-impl TrainingStats {
-    fn new(
-        trained_epochen: i32,
-        start_rating: f64,
-        avg_time_per_epoche: OffsetDateTime,
-        avg_improvement_per_epoche: f64,
-        avg_improvement_per_hour: f64,
-        current_rating: f64,
-        rating_improvement: f64,
-        start_time: OffsetDateTime,
-        current_time: OffsetDateTime,
-        trainings_dauer: OffsetDateTime,
-    ) -> Self {
-        Self {
-            trained_epochen,
-            start_rating,
-            avg_time_per_epoche,
-            avg_improvement_per_epoche,
-            avg_improvement_per_hour,
-            current_rating,
-            rating_improvement,
-            start_time,
-            current_time,
-            trainings_dauer,
-        }
-    }
-}
-
-// pub fn get_model_stats(model_name: &str) -> ModelStats {}
-//
-// pub fn get_training_stats(model_name: &str) -> TrainingStats {}
-
 // funktioniert nicht weil man das immer erst von git runter laden muss und dann in den path packen
-pub fn read_number(image_path: &String) -> Result<i32, FofError> {
-    if let Ok(false) = fs::exists(image_path) {
-        eprintln!("Image path '{}' nicht gefunden.", image_path);
-        return Err(FofError::FailedReadingFile(image_path.clone()));
-    }
-
-    match Command::new("python3")
-        .arg("src/image_data.py")
-        .arg("--zahl_erkennen")
-        .arg("--path")
-        .arg(image_path)
-        .output()
-    {
-        Ok(output) if output.status.success() => {
-            println!("{}", String::from_utf8_lossy(&output.stdout));
-            println!("Python script executed.");
-            Ok(0)
-        }
-        Ok(output) => {
-            eprintln!("Python error: {}", String::from_utf8_lossy(&output.stderr));
-            Err(FofError::PythonError(output.stderr))
-        }
-        Err(e) => {
-            eprintln!("Failed to start process: {}", e);
-            Err(FofError::FailedToStartPython)
-        }
-    }
-}
+// pub fn read_number(image_path: &String) -> Result<i32, FofError> {
+//     if let Ok(false) = fs::exists(image_path) {
+//         eprintln!("Image path '{}' nicht gefunden.", image_path);
+//         return Err(FofError::FailedReadingFile(image_path.clone()));
+//     }
+//
+//     match Command::new("python3")
+//         .arg("src/image_data.py")
+//         .arg("--zahl_erkennen")
+//         .arg("--path")
+//         .arg(image_path)
+//         .output()
+//     {
+//         Ok(output) if output.status.success() => {
+//             println!("{}", String::from_utf8_lossy(&output.stdout));
+//             println!("Python script executed.");
+//             Ok(0)
+//         }
+//         Ok(output) => {
+//             eprintln!("Python error: {}", String::from_utf8_lossy(&output.stderr));
+//             Err(FofError::PythonError(output.stderr))
+//         }
+//         Err(e) => {
+//             eprintln!("Failed to start process: {}", e);
+//             Err(FofError::FailedToStartPython)
+//         }
+//     }
+// }
 
 #[derive(Debug, Deserialize)]
 struct Metrics {
@@ -188,6 +108,7 @@ fn get_rating(model_name: &str) -> Result<f64, FofError> {
     println!("Searching for metrics of the '{}' model.", model_name);
     if let Some(m) = read_last_metrics(model_name) {
         println!("Success: Found Metrics for the '{}' model.", model_name);
+        println!("Das Model '{}' hat ein rating von: {:?}", model_name, &m);
         Ok(calculate_score(&m))
     } else {
         eprintln!(
@@ -330,8 +251,8 @@ pub fn create_model(
     yolo_model: YoloModel,
 ) -> Option<FofError> {
     println!(
-        "Creating new model '{}' with the '{:?}' yolo base model.",
-        model_name, yolo_model
+        "Creating new model '{}' with the '{:?}' yolo base model and dataset type {:?}",
+        model_name, yolo_model, dataset_type
     );
 
     if let Ok(true) = fs::exists(format!("runs/detect/{}", model_name)) {
@@ -369,20 +290,6 @@ pub fn create_model(
             println!("{}", String::from_utf8_lossy(&output.stdout));
             println!("Python script executed.");
 
-            let stats_dir = format!("Stats/{}", model_name);
-            if let Ok(true) = fs::exists(&stats_dir) {
-                eprintln!("Error: Tried to initialise Stats directory in '{}' for model '{}' but it already exists. The model probably didnt get removed correctly. Aborting..", stats_dir, model_name);
-                return Some(FofError::Failed(format!("Es wurden bereits initialisierte Stats für das Model '{}' gefunden. Kann keine neuen erstellen. Ein vorheriges Model mit diesem namen wurde wahrscheinlich nicht korrekt entfernt", model_name)));
-            }
-            if let Err(e) = fs::create_dir(&stats_dir) {
-                eprintln!("Error while trying to create stats dir.");
-                return Some(FofError::Failed(e.to_string()));
-            }
-            println!(
-                "Sucessfully initialised Stats directory for model '{}' in {}.",
-                model_name, &stats_dir
-            );
-
             None
         }
         Ok(output) => {
@@ -410,35 +317,15 @@ pub fn delete_model(model_name: &str) -> Option<FofError> {
         }
         println!("Successfully deleted {}", path);
 
-        let stats_dir = format!("Stats/{}", model_name);
-        if let Ok(false) = fs::exists(&stats_dir) {
-            eprintln!(
-                "No stats found for model '{}' to delete. Still trying to continue..",
-                model_name
-            );
-        } else {
-            let r = fs::remove_dir_all(stats_dir);
-            match r {
-                Ok(o) => println!("Successfully removed Stats for model '{}'.", model_name),
-                Err(e) => {
-                    println!(
-                        "Error while trying to delete stats dir for model '{}': {}",
-                        model_name, e
-                    );
-
-                    return Some(FofError::Failed(e.to_string()));
-                }
-            }
-        }
-        None
-    } else {
-        eprintln!("Model '{}' not found at '{}'", model_name, path);
-        Some(FofError::ModelNotFound(model_name.to_string()))
+        return None;
     }
+
+    eprintln!("Model '{}' not found at '{}'", model_name, path);
+    Some(FofError::ModelNotFound(model_name.to_string()))
 }
 
 pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
-    println!("Training model '{}'", model_name);
+    println!("Starte training für das model '{}'", model_name);
     let dataset_type = match get_dataset_type(model_name) {
         Ok(d) => d,
         Err(e) => {
@@ -472,21 +359,6 @@ pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
         model_name, path, epochen
     );
 
-    println!("Searching for stats..");
-
-    let stats_path = format!("Stats/{}", model_name);
-
-    if let Ok(false) = fs::exists(&stats_path) {
-        eprintln!(
-            "Error: Keine initialisierten Stats für '{}' in {} gefunden . (Model wurde wahrscheinlich nicht korrekt erstellt.)",
-            model_name,
-            stats_path,
-        );
-        return Some(FofError::NoStatsFound(model_name.to_string()));
-    }
-
-    println!("Found Stats for model '{}' in {}", model_name, stats_path);
-
     let start_time = time::OffsetDateTime::now_utc();
 
     let start_rating = get_rating(model_name);
@@ -512,13 +384,6 @@ pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
 
             let num_of_epochs = epochen;
             let end_rating = get_rating(model_name);
-
-            // training muss in stats hinzugefügt werdne
-            //
-            //
-            //
-            //
-            //
 
             println!("\n📊 Training Stats:");
             println!("─────────────────────────────");
@@ -580,6 +445,10 @@ fn remove_communication() {
             println!("Successfully removed Communication directory.");
         }
     }
+}
+
+pub fn stop_training(model_name: &str) -> Option<FofError> {
+    None
 }
 
 pub fn get_prediction<P>(model_name: &str, screenshot_path: &P) -> Result<Vec<Building>, FofError>

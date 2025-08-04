@@ -1,5 +1,4 @@
-Model tab:
-    ein tab wo man einen überblick über alle models hat.
-    beim training ein paar daten anzeigen, dass man wirklich sieht wie trainiert (epochen anzeigen und vielleicht nach jeder epoche das rating aktualisieren und anzeigen.)
-
-    (erstmal unwichtig) erstellen von einem model in eigenen thread
+- hardcoding fixxen
+- datasettype anzeigen im ui
+- gute settings finden
+- labellabeln
