@@ -1187,11 +1187,8 @@ impl ScreenshotApp {
         let mut idxes_to_remove = vec![];
 
         for (idx, thrd) in self.train_threads.iter().enumerate() {
-            let thrd_model_name = thrd.poll_field::<String>("model_name");
-
             if let Some(wi) = thrd.poll_field::<Arc<Mutex<bool>>>("stop") {
                 let should_stop = *wi.lock().unwrap();
-                println!("name: {:?}, should_stop: {}", thrd_model_name, should_stop);
                 if should_stop {
                     idxes_to_remove.push(idx);
                 }
@@ -1228,11 +1225,9 @@ impl ScreenshotApp {
                         for (idx, thrd) in self.train_threads.iter().enumerate() {
                             let thrd_model_name = thrd.poll_field::<String>("model_name");
                             if m == thrd_model_name {
-                                if thrd.is_running() {
-                                    is_training = true;
-                                    if let Some(eps) = thrd.poll_field::<Option<usize>>("epochen") {
-                                        epochs = eps;
-                                    }
+                                is_training = true;
+                                if let Some(eps) = thrd.poll_field::<Option<usize>>("epochen") {
+                                    epochs = eps;
                                 }
                             }
                         }
