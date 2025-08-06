@@ -1,6 +1,7 @@
 use crate::{prelude::*, threading::WorkerHandle};
 use eframe::egui::{Pos2, Vec2};
 use egui::{vec2, Rect};
+use image::GenericImage;
 
 pub fn start_ui() {
     let options = eframe::NativeOptions::default();
@@ -328,6 +329,92 @@ pub struct ScreenshotApp {
     current_avg_conf: Option<f32>,
     current_epochen: String,
     rauthaus_das_man_gerade_labeled: LabelRathaus,
+    multiply_augment_num: usize,
+}
+
+fn patch_and_save_image_no_overlap(
+    source_path_str: String,
+    base_path_str: String,
+    labels: Vec<SmthLabeled>,
+    scale: f32,
+) -> anyhow::Result<(PathBuf, Vec<SmthLabeled>)> {
+    let source_path = Path::new(&source_path_str);
+    let base_path = Path::new(&base_path_str);
+
+    let source_img = image::open(source_path)?.to_rgba8();
+    let mut base_img = image::open(base_path)?.to_rgba8();
+
+    let mut rng = rand::thread_rng();
+    let mut new_labels = vec![];
+
+    for label in labels.iter() {
+        for rect in label.get_rects() {
+            let x = rect.rect.min.x.max(0.0).floor() * scale;
+            let y = rect.rect.min.y.max(0.0).floor() * scale;
+            let w = rect.rect.width().ceil() * scale;
+            let h = rect.rect.height().ceil() * scale;
+
+            let w = (w as u32)
+                .min(((source_img.width() as f32 * scale) as u32).saturating_sub(x as u32));
+            let h = (h as u32)
+                .min(((source_img.height() as f32 * scale) as u32).saturating_sub(y as u32));
+
+            if w == 0 || h == 0 {
+                continue;
+            }
+
+            let mut sub_image = source_img.clone();
+            sub_image = sub_image.sub_image(x as u32, y as u32, w, h).to_image();
+            dbg!(x, y, w, h);
+
+            // Try up to 100 times to find a non-overlapping position
+            let mut placed = false;
+            for _ in 0..100 {
+                let rand_x = rng.gen_range(0..=base_img.width().saturating_sub(w));
+                let rand_y = rng.gen_range(0..=base_img.height().saturating_sub(h));
+
+                let new_rect = egui::Rect::from_min_size(
+                    egui::pos2(rand_x as f32, rand_y as f32),
+                    egui::vec2(w as f32, h as f32),
+                );
+
+                // Check for overlap
+                let overlaps = new_labels.iter().any(|l: &SmthLabeled| {
+                    l.get_rects().iter().any(|r| r.rect.intersects(new_rect))
+                });
+
+                if !overlaps {
+                    image::imageops::overlay(
+                        &mut base_img,
+                        &sub_image,
+                        rand_x.into(),
+                        rand_y.into(),
+                    );
+
+                    new_labels.push(SmthLabeled::Rect(LabeledRect {
+                        rect: new_rect,
+                        label: rect.label.clone(),
+                    }));
+
+                    placed = true;
+                    break;
+                }
+            }
+
+            if !placed {
+                eprintln!("Could not place patch without overlap.");
+            }
+        }
+    }
+
+    std::fs::create_dir_all("MultipliedImgs")?;
+    let output_path = PathBuf::from(format!(
+        "MultipliedImgs/patched_{}.png",
+        uuid::Uuid::new_v4()
+    ));
+    base_img.save(&output_path)?;
+
+    Ok((output_path, new_labels))
 }
 
 // Wie stark sich Rechtecke überlappen (0.0 = kein Overlap, 0.5 = 50% Overlap)
@@ -491,6 +578,7 @@ impl Default for ScreenshotApp {
             in_test_mode: false,
             current_epochen: "".to_string(),
             rauthaus_das_man_gerade_labeled: LabelRathaus::Gemischt,
+            multiply_augment_num: 0,
         };
 
         s.reload_models();
@@ -2015,8 +2103,6 @@ impl ScreenshotApp {
 
                 self.create_error("YOLO-Labels gespeichert", MessageType::Success);
             }
-
-            self.labeled_rects.clear();
         } else {
             self.create_error("Kein Bild zum Speichern ausgewählt.", MessageType::Warning);
         }
@@ -2214,10 +2300,18 @@ impl ScreenshotApp {
                 });
 
             if let Some(selected) = self.labeling_que.last() {
+                let img_is_origional = self.selected_images.contains(selected);
+
+                if img_is_origional {
+                    ui.colored_label(Color32::GREEN, "Eigenes Bild (unmultipliziert) Enter = speichern(mit multiplikation) | UpArrow = überspringen");
+                } else {
+                    ui.colored_label(Color32::RED, "nicht Originelles Bild (multipliziert) Enter = speichern(mit multiplikation) | UpArrow = überspringen");
+                }
+
                 self.update_image_texture(ctx, selected.to_string());
 
                 if let Some(texture) = &self.image_texture {
-                    let (img, _scale) = self.get_scaled_texture(ui, texture);
+                    let (img, scale) = self.get_scaled_texture(ui, texture);
                     let response = ui.add(img);
 
                     // Das gezeichnete Rechteck
@@ -2227,11 +2321,42 @@ impl ScreenshotApp {
 
                     if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
                         self.save_labeld_rects(rect.size());
+                        let img_to_multiply = self.labeling_que.pop();
+
+                        if img_is_origional {
+                            let res = patch_and_save_image_no_overlap(
+                                img_to_multiply.expect("WIEEEE IST DAS PASSIERT???? GELG FOFEIER"),
+                                "sceneries/Szene1.webp".to_string(),
+                                self.labeled_rects.clone(),
+                                scale,
+                            );
+
+                            let (path_to_new_img, rects) =
+                                res.expect("Bro Das kann nicht mehr sein FOFOFOFOFO");
+
+                            self.labeling_que
+                                .push(path_to_new_img.to_str().unwrap().to_string());
+                            self.labeled_rects = rects;
+                        }
+
+                        if self.labeling_que.is_empty() {
+                            self.selected_images.clear();
+                        }
+                        if !img_is_origional || self.labeling_que.is_empty() {
+                            self.labeled_rects.clear();
+                        }
+
+                        self.image_texture = None;
+                    }
+
+                    if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
                         self.labeling_que.pop();
                         if self.labeling_que.is_empty() {
                             self.selected_images.clear();
                         }
                         self.image_texture = None;
+                        self.labeled_rects.clear();
+                        self.create_error("Bild Übersprungen", MessageType::Success);
                     }
 
                     self.draw_rects(ui, ctx, rect);
