@@ -1886,51 +1886,55 @@ impl ScreenshotApp {
 
                 for lr in all_labeled_rects.iter() {
                     let mut raw_label = lr.label.trim().to_string();
-                    let should_push = match raw_label.as_str() {
-                        "bogenschützenturm" => true,
-                        "minenwerfer" => true,
-                        "multibogenschützenturm" => true,
-                        "magierturm" => true,
-                        "labor" => true,
-                        "tesla" => true,
-                        "luftabwehr" => true,
-                        "querschlägerkanone" => true,
-                        "xbogenboden" => true,
-                        "xbogenluft" => true,
-                        "entwicklungsturm" => true,
-                        "feuerspeier" => true,
-                        "bauhütte" => true,
-                        "bombenturm" => true,
-                        "goldlager" => true,
-                        "elexirlager" => true,
-                        "multiinfernoturm" => true,
-                        "einzelinfernoturm" => true,
-                        "giftzauberturm" => true,
-                        "rathaus" => true,
-                        "dunkleselexirlager" => true,
-                        "clanburg" => true,
-                        "streukatapult" => true,
-                        "monolyth" => true,
-                        "wutzauberturm" => true,
-                        "unsichtbarkeitszauberturm" => true,
-                        "kanone" => true,
-                        "adlerartillerie" => true,
-                        _ => false,
-                    };
-                    if should_push {
-                        raw_label.push_str(rh);
-                    }
 
-                    if raw_label.starts_with("feger") {
-                        raw_label.push_str(match rh {
-                            "17" => "11",
-                            "16" => "11",
-                            "15" => "11",
-                            "14" => "11",
-                            "13" => "11",
-                            "12" => "11",
-                            other => other,
-                        });
+                    if !rh.is_empty() {
+                        let should_push = match raw_label.as_str() {
+                            "bogenschützenturm" => "15",
+                            "minenwerfer" => "17",
+                            "multibogenschützenturm" => "17",
+                            "magierturm" => "17",
+                            "labor" => "17",
+                            "tesla" => "17",
+                            "luftabwehr" => "17",
+                            "querschlägerkanone" => "17",
+                            "xbogenboden" => "17",
+                            "xbogenluft" => "17",
+                            "entwicklungsturmkanone" => "17",
+                            "entwicklungsturmbogenschützenturm" => "17",
+                            "feuerspeier" => "17",
+                            "bauhütte" => "17",
+                            "bombenturm" => "17",
+                            "goldlager" => "17",
+                            "elexirlager" => "17",
+                            "infernoturmmulti" => "17",
+                            "infernoturmeinzel" => "17",
+                            "giftzauberturm" => "15",
+                            "rathaus" => "17",
+                            "dunkleselexirlager" => "17",
+                            "clanburg" => "17",
+                            "streukatapult" => "17",
+                            "monolyth" => "17",
+                            "wutzauberturm" => "15",
+                            "unsichtbarkeitszauberturm" => "15",
+                            "kanone" => "15",
+                            "adlerartillerie" => "16",
+                            _ => "",
+                        };
+                        if !should_push.is_empty() {
+                            // Nimm das Minimum von should_push und rh
+                            let min_level = std::cmp::min(
+                                should_push.parse::<u8>().unwrap_or(99),
+                                rh.parse::<u8>().unwrap_or(99),
+                            );
+                            raw_label.push_str(&min_level.to_string());
+                        }
+
+                        if raw_label.starts_with("feger") {
+                            raw_label.push_str(match rh {
+                                "17" | "16" | "15" | "14" | "13" | "12" => "11",
+                                other => other,
+                            });
+                        }
                     }
 
                     let extracted = label_regex.find(&raw_label).map(|m| m.as_str().to_string());
