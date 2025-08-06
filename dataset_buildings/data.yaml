@@ -15,7 +15,7 @@ names:
   11: bohrer
   12: luftabwehr
   13: querschlägerkanone
-  14: xbogen
+  14: xbogenluft
   15: dunklezauberfabrik
   16: entwicklungsturm
   17: feuerspeier
@@ -30,13 +30,13 @@ names:
   26: kaserne
   27: goldlager
   28: elexirlager
-  29: infernoturm
+  29: multiinfernoturm
   30: giftzauberturm
   31: rathaus
   32: dunkleselexirlager
   33: clanburg
   34: streukatapult
-  35: feger
+  35: fegerO
   36: monolyth
   37: zauberfabrik
   38: begleiterhütte
@@ -47,4 +47,13 @@ names:
   43: unsichtbarkeitszauberturm
   44: kanone
   45: adlerartillerie
+  46: einzelinfernoturm
+  47: xbogenboden
+  48: fegerOR
+  49: fegerR
+  50: fegerUR
+  51: fegerU
+  52: fegerUL
+  53: fegerL
+  54: fegerOL
 

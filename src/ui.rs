@@ -220,6 +220,84 @@ impl threading::AutoThread for GetBuildingsThread {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum LabelRathaus {
+    Gemischt,
+    Rh1,
+    Rh2,
+    Rh3,
+    Rh4,
+    Rh5,
+    Rh6,
+    Rh7,
+    Rh8,
+    Rh9,
+    Rh10,
+    Rh11,
+    Rh12,
+    Rh13,
+    Rh14,
+    Rh15,
+    Rh16,
+    Rh17,
+}
+
+impl LabelRathaus {
+    fn get_level(&self) -> &'static str {
+        match self {
+            LabelRathaus::Gemischt => "",
+            LabelRathaus::Rh1 => "1",
+            LabelRathaus::Rh2 => "2",
+            LabelRathaus::Rh3 => "3",
+            LabelRathaus::Rh4 => "4",
+            LabelRathaus::Rh5 => "5",
+            LabelRathaus::Rh6 => "6",
+            LabelRathaus::Rh7 => "7",
+            LabelRathaus::Rh8 => "8",
+            LabelRathaus::Rh9 => "9",
+            LabelRathaus::Rh10 => "10",
+            LabelRathaus::Rh11 => "11",
+            LabelRathaus::Rh12 => "12",
+            LabelRathaus::Rh13 => "13",
+            LabelRathaus::Rh14 => "14",
+            LabelRathaus::Rh15 => "15",
+            LabelRathaus::Rh16 => "16",
+            LabelRathaus::Rh17 => "17",
+        }
+    }
+
+    fn all_variants() -> &'static [LabelRathaus] {
+        use LabelRathaus::*;
+        &[
+            Gemischt, Rh1, Rh2, Rh3, Rh4, Rh5, Rh6, Rh7, Rh8, Rh9, Rh10, Rh11, Rh12, Rh13, Rh14,
+            Rh15, Rh16, Rh17,
+        ]
+    }
+
+    fn to_string(&self) -> &'static str {
+        match self {
+            LabelRathaus::Gemischt => "Gemischt",
+            LabelRathaus::Rh1 => "RH1",
+            LabelRathaus::Rh2 => "RH2",
+            LabelRathaus::Rh3 => "RH3",
+            LabelRathaus::Rh4 => "RH4",
+            LabelRathaus::Rh5 => "RH5",
+            LabelRathaus::Rh6 => "RH6",
+            LabelRathaus::Rh7 => "RH7",
+            LabelRathaus::Rh8 => "RH8",
+            LabelRathaus::Rh9 => "RH9",
+            LabelRathaus::Rh10 => "RH10",
+            LabelRathaus::Rh11 => "RH11",
+            LabelRathaus::Rh12 => "RH12",
+            LabelRathaus::Rh13 => "RH13",
+            LabelRathaus::Rh14 => "RH14",
+            LabelRathaus::Rh15 => "RH15",
+            LabelRathaus::Rh16 => "RH16",
+            LabelRathaus::Rh17 => "RH17",
+        }
+    }
+}
+
 pub struct ScreenshotApp {
     screenshot_path: String,
     keybind: String,
@@ -249,6 +327,7 @@ pub struct ScreenshotApp {
     in_test_mode: bool,
     current_avg_conf: Option<f32>,
     current_epochen: String,
+    rauthaus_das_man_gerade_labeled: LabelRathaus,
 }
 
 // Wie stark sich Rechtecke überlappen (0.0 = kein Overlap, 0.5 = 50% Overlap)
@@ -411,6 +490,7 @@ impl Default for ScreenshotApp {
             current_models: vec![],
             in_test_mode: false,
             current_epochen: "".to_string(),
+            rauthaus_das_man_gerade_labeled: LabelRathaus::Gemischt,
         };
 
         s.reload_models();
@@ -1447,18 +1527,23 @@ impl ScreenshotApp {
         }
         // Loslassen
         if pointer_released {
-            if let Some(SmthLabeled::Rect(r)) = self.labeled_rects.last() {
-                let lvls = ScreenshotApp::extract_numbers(&r.label);
+            if self.rauthaus_das_man_gerade_labeled == LabelRathaus::Gemischt {
+                if let Some(smthl) = self.labeled_rects.last() {
+                    let lvls = ScreenshotApp::extract_numbers(&smthl.get_label());
 
-                if lvls.len() > 1 {
-                    self.create_error("Mehr als ein Level in Label Gefunden", MessageType::Warning);
-                } else if lvls.is_empty() {
-                    self.create_error("Kein Level in Label Gefunden", MessageType::Warning);
-                } else if lvls[0] < 1 || lvls[0] > 17 {
-                    self.create_error(
-                        "Level in Label nicht zwischen 1 und 17",
-                        MessageType::Warning,
-                    );
+                    if lvls.len() > 1 {
+                        self.create_error(
+                            "Mehr als ein Level in Label Gefunden",
+                            MessageType::Warning,
+                        );
+                    } else if lvls.is_empty() {
+                        self.create_error("Kein Level in Label Gefunden", MessageType::Warning);
+                    } else if lvls[0] < 1 || lvls[0] > 17 {
+                        self.create_error(
+                            "Level in Label nicht zwischen 1 und 17",
+                            MessageType::Warning,
+                        );
+                    }
                 }
             }
             if let (Some(start), Some(end)) = (self.current_rect_start, self.current_rect_end) {
@@ -1475,6 +1560,25 @@ impl ScreenshotApp {
 
         // Loslassen
         if pointer_released2 {
+            if self.rauthaus_das_man_gerade_labeled == LabelRathaus::Gemischt {
+                if let Some(smthl) = self.labeled_rects.last() {
+                    let lvls = ScreenshotApp::extract_numbers(&smthl.get_label());
+
+                    if lvls.len() > 1 {
+                        self.create_error(
+                            "Mehr als ein Level in Label Gefunden",
+                            MessageType::Warning,
+                        );
+                    } else if lvls.is_empty() {
+                        self.create_error("Kein Level in Label Gefunden", MessageType::Warning);
+                    } else if lvls[0] < 1 || lvls[0] > 17 {
+                        self.create_error(
+                            "Level in Label nicht zwischen 1 und 17",
+                            MessageType::Warning,
+                        );
+                    }
+                }
+            }
             if let (Some(start), Some(end)) = (self.current_line_start, self.current_line_end) {
                 let mut avg_divisons = vec![];
                 for lsmth in self.labeled_rects.iter() {
@@ -1778,9 +1882,58 @@ impl ScreenshotApp {
                     all_labeled_rects.append(&mut lr.get_rects());
                 }
 
+                let rh = self.rauthaus_das_man_gerade_labeled.get_level();
+
                 for lr in all_labeled_rects.iter() {
-                    let raw_label = lr.label.trim();
-                    let extracted = label_regex.find(raw_label).map(|m| m.as_str().to_string());
+                    let mut raw_label = lr.label.trim().to_string();
+                    let should_push = match raw_label.as_str() {
+                        "bogenschützenturm" => true,
+                        "minenwerfer" => true,
+                        "multibogenschützenturm" => true,
+                        "magierturm" => true,
+                        "labor" => true,
+                        "tesla" => true,
+                        "luftabwehr" => true,
+                        "querschlägerkanone" => true,
+                        "xbogenboden" => true,
+                        "xbogenluft" => true,
+                        "entwicklungsturm" => true,
+                        "feuerspeier" => true,
+                        "bauhütte" => true,
+                        "bombenturm" => true,
+                        "goldlager" => true,
+                        "elexirlager" => true,
+                        "multiinfernoturm" => true,
+                        "einzelinfernoturm" => true,
+                        "giftzauberturm" => true,
+                        "rathaus" => true,
+                        "dunkleselexirlager" => true,
+                        "clanburg" => true,
+                        "streukatapult" => true,
+                        "monolyth" => true,
+                        "wutzauberturm" => true,
+                        "unsichtbarkeitszauberturm" => true,
+                        "kanone" => true,
+                        "adlerartillerie" => true,
+                        _ => false,
+                    };
+                    if should_push {
+                        raw_label.push_str(rh);
+                    }
+
+                    if raw_label.starts_with("feger") {
+                        raw_label.push_str(match rh {
+                            "17" => "11",
+                            "16" => "11",
+                            "15" => "11",
+                            "14" => "11",
+                            "13" => "11",
+                            "12" => "11",
+                            other => other,
+                        });
+                    }
+
+                    let extracted = label_regex.find(&raw_label).map(|m| m.as_str().to_string());
 
                     if extracted.is_none() {
                         continue;
@@ -2044,6 +2197,18 @@ impl ScreenshotApp {
         self.session_button(ui);
 
         if is_running {
+            egui::ComboBox::from_label("Rathaus-Level auswählen")
+                .selected_text(self.rauthaus_das_man_gerade_labeled.to_string())
+                .show_ui(ui, |ui| {
+                    for variant in LabelRathaus::all_variants() {
+                        ui.selectable_value(
+                            &mut self.rauthaus_das_man_gerade_labeled,
+                            variant.clone(),
+                            variant.to_string(),
+                        );
+                    }
+                });
+
             if let Some(selected) = self.labeling_que.last() {
                 self.update_image_texture(ctx, selected.to_string());
 
