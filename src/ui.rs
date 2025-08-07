@@ -1991,7 +1991,7 @@ impl ScreenshotApp {
                             "entwicklungsturmkanone" => "17",
                             "entwicklungsturmbogenschützenturm" => "17",
                             "feuerspeier" => "17",
-                            "bauhütte" => "17",
+                            "mauer" => "17",
                             "bombenturm" => "17",
                             "goldlager" => "17",
                             "elexirlager" => "17",
@@ -2016,6 +2016,14 @@ impl ScreenshotApp {
                                 rh.parse::<u8>().unwrap_or(99),
                             );
                             raw_label.push_str(&min_level.to_string());
+                        }
+
+                        if raw_label == "bauhütte" {
+                            raw_label.push_str(match rh {
+                                "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10"
+                                | "11" | "12" | "13" => "1",
+                                other => other,
+                            });
                         }
 
                         if raw_label.starts_with("feger") {
