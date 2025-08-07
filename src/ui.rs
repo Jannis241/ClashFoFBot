@@ -1310,7 +1310,7 @@ impl ScreenshotApp {
             val
         } else {
             self.create_error("Konnte Buildings nicht Laden", MessageType::Error);
-            Ok(vec![])
+            return;
         };
 
         if let Err(e) = buildings.clone() {
@@ -1448,7 +1448,12 @@ impl ScreenshotApp {
                         let m = Some(model.name);
 
                         for (idx, thrd) in self.train_threads.iter().enumerate() {
-                            let thrd_model_name = thrd.poll_field::<String>("model_name");
+                            let mut thrd_model_name = None;
+
+                            while thrd_model_name.is_none() {
+                                thrd_model_name = thrd.poll_field::<String>("model_name");
+                            }
+
                             if m == thrd_model_name {
                                 is_training = true;
                                 if let Some(eps) = thrd.poll_field::<Option<usize>>("epochen") {
