@@ -1,5 +1,5 @@
 use crate::{prelude::*, threading::WorkerHandle};
-use eframe::egui::{Pos2, Vec2};
+use eframe::egui::{text, Pos2, Vec2};
 use egui::{vec2, Rect};
 use image::GenericImage;
 
@@ -299,7 +299,14 @@ impl LabelRathaus {
     }
 }
 
+#[derive(PartialEq, Clone)]
+enum LabelingMode {
+    Manual,
+    JaNein,
+}
+
 pub struct ScreenshotApp {
+    current_labeling_mode: Option<LabelingMode>,
     screenshot_path: String,
     keybind: String,
     split_count: i32,
@@ -541,6 +548,7 @@ impl SmthLabeled {
 impl Default for ScreenshotApp {
     fn default() -> Self {
         let mut s = Self {
+            current_labeling_mode: None,
             current_avg_conf: None,
             current_buildings: None,
             split_count: 1,
@@ -1066,6 +1074,27 @@ impl ScreenshotApp {
         }
     }
 
+    fn update_image_texture_sub_img(
+        &mut self,
+        ctx: &egui::Context,
+        selected: String,
+        sub_part: Rect,
+    ) {
+        if self.image_texture.is_none() {
+            if let Ok(img) = image::open(selected) {
+                let img = img.to_rgba8();
+                let size = [img.width() as usize, img.height() as usize];
+                let color_img = egui::ColorImage::from_rgba_unmultiplied(size, &img.into_raw());
+                let color_img = color_img.region_by_pixels(
+                    [sub_part.left() as usize, sub_part.top() as usize],
+                    [sub_part.width() as usize, sub_part.height() as usize],
+                );
+                self.image_texture =
+                    Some(ctx.load_texture("selected_image", color_img, Default::default()));
+            }
+        }
+    }
+
     fn get_scaled_texture(
         &self,
         ui: &mut egui::Ui,
@@ -1583,7 +1612,8 @@ impl ScreenshotApp {
         let mut pointer_pos = ui.input(|i| i.pointer.hover_pos());
 
         if let Some(pos) = pointer_pos {
-            pointer_pos = Some(pos - rect.left_top().to_vec2());
+            pointer_pos =
+                Some(((pos - rect.left_top().to_vec2()).to_vec2() / rect.size()).to_pos2());
         }
 
         let pointer_down = ui.input(|i| i.pointer.primary_down());
@@ -1641,7 +1671,8 @@ impl ScreenshotApp {
                 }
             }
             if let (Some(start), Some(end)) = (self.current_rect_start, self.current_rect_end) {
-                let rect = egui::Rect::from_two_pos(start, end).expand(2.0);
+                let rect = egui::Rect::from_two_pos(start, end);
+                dbg!(&rect);
                 self.labeled_rects.push(SmthLabeled::Rect(LabeledRect {
                     rect,
                     label: String::new(),
@@ -1902,8 +1933,8 @@ impl ScreenshotApp {
                 let mut class_map: HashMap<String, usize> =
                     data.names.iter().map(|(k, v)| (v.clone(), *k)).collect();
 
-                let w = final_size.x;
-                let h = final_size.y;
+                // let w = final_size.x;
+                // let h = final_size.y;
 
                 let is_train = rng.gen_bool(0.8);
                 let (img_target, label_target) = if is_train {
@@ -2062,10 +2093,10 @@ impl ScreenshotApp {
                         new_id
                     };
 
-                    let x = (lr.rect.min.x + lr.rect.max.x) / 2.0 / w;
-                    let y = (lr.rect.min.y + lr.rect.max.y) / 2.0 / h;
-                    let bw = (lr.rect.max.x - lr.rect.min.x) / w;
-                    let bh = (lr.rect.max.y - lr.rect.min.y) / h;
+                    let x = (lr.rect.min.x + lr.rect.max.x) / 2.0;
+                    let y = (lr.rect.min.y + lr.rect.max.y) / 2.0;
+                    let bw = lr.rect.max.x - lr.rect.min.x;
+                    let bh = lr.rect.max.y - lr.rect.min.y;
 
                     if writeln!(
                         label_file,
@@ -2134,13 +2165,15 @@ impl ScreenshotApp {
 
         for (idx, lr) in all_labeled_rects.iter().enumerate() {
             let new_rect = Rect::from_two_pos(
-                lr.rect.left_top() + img_rect.left_top().to_vec2(),
-                lr.rect.right_bottom() + img_rect.left_top().to_vec2(),
+                (lr.rect.left_top().to_vec2() * img_rect.size()).to_pos2()
+                    + img_rect.left_top().to_vec2(),
+                (lr.rect.right_bottom().to_vec2() * img_rect.size()).to_pos2()
+                    + img_rect.left_top().to_vec2(),
             );
             painter.rect_stroke(new_rect, 0.0, (2.0, egui::Color32::RED), StrokeKind::Middle);
             if idx + 1 == all_labeled_rects.len() {
                 painter.text(
-                    lr.rect.left_top() + img_rect.left_top().to_vec2(),
+                    lr.rect.left_top() * img_rect.width() + img_rect.left_top().to_vec2(),
                     egui::Align2::LEFT_TOP,
                     &lr.label,
                     egui::TextStyle::Body.resolve(&ctx.style()),
@@ -2151,8 +2184,8 @@ impl ScreenshotApp {
 
         if let (Some(start), Some(current)) = (self.current_rect_start, self.current_rect_end) {
             let rect = egui::Rect::from_two_pos(
-                start + img_rect.left_top().to_vec2(),
-                current + img_rect.left_top().to_vec2(),
+                (start.to_vec2() * img_rect.size()).to_pos2() + img_rect.left_top().to_vec2(),
+                (current.to_vec2() * img_rect.size()).to_pos2() + img_rect.left_top().to_vec2(),
             );
             painter.rect_stroke(rect, 0.0, (1.0, egui::Color32::GREEN), StrokeKind::Middle);
         }
@@ -2160,8 +2193,8 @@ impl ScreenshotApp {
         if let (Some(start), Some(current)) = (self.current_line_start, self.current_line_end) {
             painter.line_segment(
                 [
-                    start + img_rect.left_top().to_vec2(),
-                    current + img_rect.left_top().to_vec2(),
+                    (start.to_vec2() * img_rect.size()).to_pos2() + img_rect.left_top().to_vec2(),
+                    (current.to_vec2() * img_rect.size()).to_pos2() + img_rect.left_top().to_vec2(),
                 ],
                 (1.0, egui::Color32::GREEN),
             );
@@ -2242,6 +2275,8 @@ impl ScreenshotApp {
                 self.selected_images.clear();
                 self.labeled_rects.clear();
                 self.create_error("Session beendet", MessageType::Success);
+                self.current_labeling_mode = None;
+                self.rauthaus_das_man_gerade_labeled = LabelRathaus::Gemischt;
             } else {
                 self.labeling_que = self.selected_images.iter().cloned().collect();
                 self.create_error("Session gestartet", MessageType::Success);
@@ -2296,90 +2331,118 @@ impl ScreenshotApp {
                     }
                 });
             });
+            ui.horizontal(|ui| {
+                ui.label("Labeling Typ:");
+
+                let resp = egui::ComboBox::from_id_source("dataset_mode_selector")
+                    .selected_text(match self.current_labeling_mode {
+                        None => "Nicht ausgewählt",
+                        Some(LabelingMode::Manual) => "Manual",
+                        Some(LabelingMode::JaNein) => "JaNein",
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.current_labeling_mode,
+                            Some(LabelingMode::Manual),
+                            "Manual",
+                        );
+                        ui.selectable_value(
+                            &mut self.current_labeling_mode,
+                            Some(LabelingMode::JaNein),
+                            "JaNein",
+                        );
+                    });
+
+                if resp.response.changed() {
+                    self.create_error("Labeling Typ geändert", MessageType::Success);
+                }
+            });
         }
 
-        self.session_button(ui);
+        if let Some(labeling_mode) = self.current_labeling_mode.clone() {
+            self.session_button(ui);
 
-        if is_running {
-            egui::ComboBox::from_label("Rathaus-Level auswählen")
-                .selected_text(self.rauthaus_das_man_gerade_labeled.to_string())
-                .show_ui(ui, |ui| {
-                    for variant in LabelRathaus::all_variants() {
-                        ui.selectable_value(
-                            &mut self.rauthaus_das_man_gerade_labeled,
-                            variant.clone(),
-                            variant.to_string(),
-                        );
-                    }
-                });
-
-            if let Some(selected) = self.labeling_que.last() {
-                // let img_is_origional = self.selected_images.contains(selected);
-                //
-                // if img_is_origional {
-                //     ui.colored_label(Color32::GREEN, "Eigenes Bild (unmultipliziert) Enter = speichern(mit multiplikation) | UpArrow = überspringen");
-                // } else {
-                //     ui.colored_label(Color32::RED, "nicht Originelles Bild (multipliziert) Enter = speichern(mit multiplikation) | UpArrow = überspringen");
-                // }
-                //
-                self.update_image_texture(ctx, selected.to_string());
-
-                if let Some(texture) = &self.image_texture {
-                    let (img, scale) = self.get_scaled_texture(ui, texture);
-                    let response = ui.add(img);
-
-                    // Das gezeichnete Rechteck
-                    let rect = response.rect;
-                    self.handel_labeling_cursor(ui, rect);
-                    self.add_lable_to_yaml(ctx);
-
-                    if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        self.save_labeld_rects(rect.size());
-                        let img_to_multiply = self.labeling_que.pop();
-
-                        // if img_is_origional {
-                        //     let res = patch_and_save_image_no_overlap(
-                        //         img_to_multiply.expect("WIEEEE IST DAS PASSIERT???? GELG FOFEIER"),
-                        //         "sceneries/Szene1.webp".to_string(),
-                        //         self.labeled_rects.clone(),
-                        //         scale,
-                        //     );
-                        //
-                        //     let (path_to_new_img, rects) =
-                        //         res.expect("Bro Das kann nicht mehr sein FOFOFOFOFO");
-                        //
-                        //     self.labeling_que
-                        //         .push(path_to_new_img.to_str().unwrap().to_string());
-                        //     self.labeled_rects = rects;
-                        // }
-
-                        if self.labeling_que.is_empty() {
-                            self.selected_images.clear();
+            if is_running && labeling_mode == LabelingMode::Manual {
+                egui::ComboBox::from_label("Rathaus-Level auswählen")
+                    .selected_text(self.rauthaus_das_man_gerade_labeled.to_string())
+                    .show_ui(ui, |ui| {
+                        for variant in LabelRathaus::all_variants() {
+                            ui.selectable_value(
+                                &mut self.rauthaus_das_man_gerade_labeled,
+                                variant.clone(),
+                                variant.to_string(),
+                            );
                         }
-                        // if !img_is_origional || self.labeling_que.is_empty() {
-                        //     self.labeled_rects.clear();
-                        // }
-                        if self.labeling_que.is_empty() {
+                    });
+
+                if let Some(selected) = self.labeling_que.last() {
+                    // let img_is_origional = self.selected_images.contains(selected);
+                    //
+                    // if img_is_origional {
+                    //     ui.colored_label(Color32::GREEN, "Eigenes Bild (unmultipliziert) Enter = speichern(mit multiplikation) | UpArrow = überspringen");
+                    // } else {
+                    //     ui.colored_label(Color32::RED, "nicht Originelles Bild (multipliziert) Enter = speichern(mit multiplikation) | UpArrow = überspringen");
+                    // }
+                    //
+                    self.update_image_texture(ctx, selected.to_string());
+
+                    if let Some(texture) = &self.image_texture {
+                        let (img, scale) = self.get_scaled_texture(ui, texture);
+                        let response = ui.add(img);
+
+                        // Das gezeichnete Rechteck
+                        let rect = response.rect;
+                        self.handel_labeling_cursor(ui, rect);
+                        self.add_lable_to_yaml(ctx);
+
+                        if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                            self.save_labeld_rects(rect.size());
+                            let img_to_multiply = self.labeling_que.pop();
+
+                            // if img_is_origional {
+                            //     let res = patch_and_save_image_no_overlap(
+                            //         img_to_multiply.expect("WIEEEE IST DAS PASSIERT???? GELG FOFEIER"),
+                            //         "sceneries/Szene1.webp".to_string(),
+                            //         self.labeled_rects.clone(),
+                            //         scale,
+                            //     );
+                            //
+                            //     let (path_to_new_img, rects) =
+                            //         res.expect("Bro Das kann nicht mehr sein FOFOFOFOFO");
+                            //
+                            //     self.labeling_que
+                            //         .push(path_to_new_img.to_str().unwrap().to_string());
+                            //     self.labeled_rects = rects;
+                            // }
+
+                            if self.labeling_que.is_empty() {
+                                self.selected_images.clear();
+                                self.current_labeling_mode = None;
+                                self.rauthaus_das_man_gerade_labeled = LabelRathaus::Gemischt;
+                                self.labeled_rects.clear();
+                            }
+                            // if !img_is_origional || self.labeling_que.is_empty() {
+                            //     self.labeled_rects.clear();
+                            // }
+                            self.image_texture = None;
+                        }
+
+                        if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+                            self.labeling_que.pop();
+                            if self.labeling_que.is_empty() {
+                                self.selected_images.clear();
+                            }
+                            self.image_texture = None;
                             self.labeled_rects.clear();
+                            self.create_error("Bild Übersprungen", MessageType::Success);
                         }
 
-                        self.image_texture = None;
+                        self.draw_rects(ui, ctx, rect);
                     }
-
-                    if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
-                        self.labeling_que.pop();
-                        if self.labeling_que.is_empty() {
-                            self.selected_images.clear();
-                        }
-                        self.image_texture = None;
-                        self.labeled_rects.clear();
-                        self.create_error("Bild Übersprungen", MessageType::Success);
-                    }
-
-                    self.draw_rects(ui, ctx, rect);
+                } else {
+                    ui.label("Kein Bild ausgewählt.");
                 }
-            } else {
-                ui.label("Kein Bild ausgewählt.");
+            } else if is_running && labeling_mode == LabelingMode::JaNein {
             }
         }
     }
