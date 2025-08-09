@@ -332,63 +332,47 @@ pub fn delete_model(model_name: &str) -> Option<FofError> {
 use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
 
-pub struct Trainer {
-    child_process: Option<Child>,
+pub fn start_training(model_name: &str, epochen: i32) -> Result<Child, FofError> {
+    let dataset_type = get_dataset_type(model_name)?;
+    let dataset_type_str = match dataset_type {
+        DatasetType::Level => "level",
+        DatasetType::Buildings => "buildings",
+    };
+
+    let path = format!("runs/detect/{}", model_name);
+    if !fs::metadata(&path).is_ok() {
+        return Err(FofError::ModelNotFound(model_name.to_string()));
+    }
+
+    let child = Command::new("python3")
+        .arg("src/image_data.py")
+        .arg("--train")
+        .arg("--model-name")
+        .arg(model_name)
+        .arg("--epochs")
+        .arg(epochen.to_string())
+        .arg("--dataset_type")
+        .arg(dataset_type_str)
+        .spawn()
+        .map_err(|e| {
+            eprintln!("Fehler beim Starten des Trainingsprozesses: {}", e);
+            FofError::FailedToStartPython
+        })?;
+
+    println!("Training gestartet für Modell '{}'", model_name);
+    Ok(child)
 }
 
-impl Trainer {
-    pub fn new() -> Self {
-        Trainer {
-            child_process: None,
-        }
-    }
+pub fn stop_training(child: &mut Child) -> Option<FofError> {
+    child.kill().map_err(|e| {
+        eprintln!("Fehler beim Stoppen des Trainings: {}", e);
+        Some(FofError::FailedToStopTraining)
+    });
 
-    // Startet das Training, speichert den Child-Prozess
-    pub fn start_training(&mut self, model_name: &str, epochen: i32) -> Result<(), FofError> {
-        let dataset_type = get_dataset_type(model_name)?;
-        let dataset_type_str = match dataset_type {
-            DatasetType::Level => "level",
-            DatasetType::Buildings => "buildings",
-        };
+    let _ = child.wait();
 
-        let path = format!("runs/detect/{}", model_name);
-        if !fs::metadata(&path).is_ok() {
-            return Err(FofError::ModelNotFound(model_name.to_string()));
-        }
-
-        // Starten des Trainingsprozesses (async)
-        let child = Command::new("python3")
-            .arg("src/image_data.py")
-            .arg("--train")
-            .arg("--model-name")
-            .arg(model_name)
-            .arg("--epochs")
-            .arg(epochen.to_string())
-            .arg("--dataset_type")
-            .arg(dataset_type_str)
-            .spawn()
-            .map_err(|_| FofError::FailedToStartPython)?;
-
-        self.child_process = Some(child);
-        println!("Training gestartet für Modell '{}'", model_name);
-        Ok(())
-    }
-
-    // Stoppt den laufenden Trainingsprozess, falls einer existiert
-    pub fn stop_training(&mut self) -> Result<(), FofError> {
-        if let Some(child) = &mut self.child_process {
-            child.kill().map_err(|e| {
-                eprintln!("Fehler beim Stoppen des Trainings: {}", e);
-                FofError::FailedToStopTraining
-            })?;
-            println!("Training wurde gestoppt.");
-            self.child_process = None;
-            Ok(())
-        } else {
-            eprintln!("Kein laufendes Training zum Stoppen gefunden.");
-            Err(FofError::NoTrainingRunning)
-        }
-    }
+    println!("Training wurde gestoppt.");
+    None
 }
 
 fn remove_communication() {
