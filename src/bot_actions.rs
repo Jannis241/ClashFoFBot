@@ -4,4 +4,4 @@ pub fn skip() {}
 
 pub fn surrender() {}
 
-pub fn changeArmy() {}
+pub fn change_army() {}

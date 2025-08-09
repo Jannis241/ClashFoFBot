@@ -1,7 +1,6 @@
 use crate::prelude::*;
 
-use image::{ImageBuffer, Rgba, RgbaImage};
-use std::{error::Error, thread::panicking};
+use image::{ImageBuffer, RgbaImage};
 
 pub fn split(image_path: &str, num_of_parts: i32, save_path: &str) {
     let image: RgbaImage = image::open(image_path).unwrap().into();

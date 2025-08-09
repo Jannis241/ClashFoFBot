@@ -1,5 +1,4 @@
 use strum_macros::AsRefStr;
-use time::OffsetDateTime;
 
 use crate::prelude::*;
 
@@ -116,7 +115,7 @@ fn get_rating(model_name: &str) -> Result<f64, FofError> {
             model_name
         );
         return Err(FofError::NoMetricsFoundForModel(
-            model_name.clone().to_string(),
+            model_name.to_string(),
         ));
     }
 }

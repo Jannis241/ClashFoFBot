@@ -1,10 +1,9 @@
 use crate::{prelude::*, threading::WorkerHandle};
 use eframe::egui::{
-    text,
     Key::{self, *},
     Pos2, Vec2,
 };
-use egui::{vec2, Rect};
+use egui::Rect;
 
 const GREEN: egui::Color32 = egui::Color32::from_rgb(0, 200, 100);
 const YELLOW: egui::Color32 = egui::Color32::from_rgb(255, 180, 0);
@@ -1993,7 +1992,7 @@ impl ScreenshotApp {
             use std::collections::HashMap;
             use std::fs;
             use std::io::Write;
-            use std::path::{Path, PathBuf};
+            use std::path::Path;
 
             #[derive(Debug, Deserialize, Serialize)]
             struct DataYaml {
