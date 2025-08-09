@@ -180,7 +180,7 @@ args = parser.parse_args()
 epochs = args.epochs
 
 if args.testvals:
-    testvals(args.model_name, args.data_set_type)
+    testvals(args.model_name, args.dataset_type)
 
 
 if args.create_model:
