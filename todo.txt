@@ -1,6 +1,6 @@
+- training stoppen funktion (gucken ob das mit dem winter arc funtioniert)
 - verstecke mauern simulieren und anzeigen
 - mauern linien im ui anzeigen
 - builings und mauern label zu einem kombinieren und im ui anzeigen.
 - filter (normal, defences, wall)
-
 - später: keybind settings speichern (auch wenn man es schließt)
