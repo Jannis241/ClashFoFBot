@@ -171,6 +171,7 @@ enum Function {
     SubtractDivision,
     SaveImg,
     SkipImg,
+    RepeatLastLabel,
 }
 
 #[derive(Clone, Debug)]
@@ -544,7 +545,10 @@ impl Default for ScreenshotApp {
 
         s.reload_models();
         s.keybinds.insert(Function::SaveImg, Keybind::Done(Enter));
-        s.keybinds.insert(Function::SkipImg, Keybind::Done(ArrowUp));
+        s.keybinds
+            .insert(Function::SkipImg, Keybind::Done(ArrowRight));
+        s.keybinds
+            .insert(Function::RepeatLastLabel, Keybind::Done(ArrowUp));
         s.keybinds
             .insert(Function::AutoComplete, Keybind::Done(Space));
         s.keybinds
@@ -933,6 +937,7 @@ impl ScreenshotApp {
                 Function::SubtractDivision,
                 Function::SaveImg,
                 Function::SkipImg,
+                Function::RepeatLastLabel,
             ] {
                 ui.horizontal(|ui| {
                     // Function name
@@ -1750,6 +1755,11 @@ impl ScreenshotApp {
             })
             .collect();
         if self.current_rect_start.is_none() {
+            let second_to_last = self.labeled_rects.get(self.labeled_rects.len() - 2).clone();
+            let mut sllabel = None;
+            if let Some(sl) = second_to_last {
+                sllabel = Some(sl.get_label().clone());
+            }
             if let Some(r) = self.labeled_rects.last_mut() {
                 // Lade bekannte Klassen aus data.yaml
                 let yaml_path = std::path::Path::new("dataset_buildings/data.yaml");
@@ -1797,7 +1807,6 @@ impl ScreenshotApp {
                         egui::Event::Key {
                             key, pressed: true, ..
                         } => {
-                            dbg!(&key, &self.keybinds);
                             if key == &egui::Key::Backspace {
                                 r.pop();
                             }
@@ -1821,10 +1830,17 @@ impl ScreenshotApp {
                                     }
                                 }
                             }
-                            if let Some(keybind) = self.keybinds.get(&Function::AutoComplete) {
-                                dbg!(&keybind);
+                            if let Some(keybind) = self.keybinds.get(&Function::RepeatLastLabel) {
                                 if let Keybind::Done(keybind) = keybind {
-                                    dbg!(&keybind);
+                                    if keybind == key {
+                                        if let Some(ref last) = sllabel {
+                                            r.set_label(last.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                            if let Some(keybind) = self.keybinds.get(&Function::AutoComplete) {
+                                if let Keybind::Done(keybind) = keybind {
                                     if keybind == key {
                                         let trimmed = label.trim();
                                         let matches: Vec<&String> = class_names
@@ -2515,13 +2531,21 @@ impl ScreenshotApp {
                         self.handel_labeling_cursor(ui, rect);
                         self.add_lable_to_yaml(ctx);
 
-                        if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-                            self.reset_labeling(false, false, vec![]);
+                        if let Some(keybind) = self.keybinds.get(&Function::SaveImg) {
+                            if let Keybind::Done(keybind) = keybind {
+                                if ctx.input(|i| i.key_pressed(*keybind)) {
+                                    self.reset_labeling(false, false, vec![]);
+                                }
+                            }
                         }
 
-                        if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
-                            self.reset_labeling(true, false, vec![]);
-                            self.create_error("Bild Übersprungen", MessageType::Success);
+                        if let Some(keybind) = self.keybinds.get(&Function::SkipImg) {
+                            if let Keybind::Done(keybind) = keybind {
+                                if ctx.input(|i| i.key_pressed(*keybind)) {
+                                    self.reset_labeling(true, false, vec![]);
+                                    self.create_error("Bild Übersprungen", MessageType::Success);
+                                }
+                            }
                         }
 
                         self.draw_rects(ui, ctx, rect);
@@ -2572,10 +2596,24 @@ impl ScreenshotApp {
                                     })];
 
                                     self.draw_rects(ui, ctx, rect);
-                                    if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-                                        self.reset_labeling(false, true, builds);
-                                    } else if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
-                                        self.reset_labeling(true, true, builds);
+                                    if let Some(keybind) = self.keybinds.get(&Function::SaveImg) {
+                                        if let Keybind::Done(keybind) = keybind {
+                                            if ctx.input(|i| i.key_pressed(*keybind)) {
+                                                self.reset_labeling(false, true, builds.clone());
+                                            }
+                                        }
+                                    }
+
+                                    if let Some(keybind) = self.keybinds.get(&Function::SkipImg) {
+                                        if let Keybind::Done(keybind) = keybind {
+                                            if ctx.input(|i| i.key_pressed(*keybind)) {
+                                                self.reset_labeling(true, true, builds);
+                                                self.create_error(
+                                                    "Bild Übersprungen",
+                                                    MessageType::Success,
+                                                );
+                                            }
+                                        }
                                     }
                                 }
                             }
