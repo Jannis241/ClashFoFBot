@@ -1,5 +1,6 @@
 use crate::{prelude::*, threading::WorkerHandle};
 use eframe::egui::{text, Pos2, Vec2};
+use eframe::epaint::ColorMode;
 use egui::{vec2, Rect};
 use image::GenericImage;
 
@@ -41,7 +42,7 @@ fn keycode_from_str(key: &str) -> Option<Keycode> {
     generate_keycode_match!(
         key, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, F1, F2,
         F3, F4, F5, F6, F7, F8, F9, F10, F11, F12, Key0, Key1, Key2, Key3, Key4, Key5, Key6, Key7,
-        Key8, Key9, Escape, Space, Enter, Backspace, LShift, RShift
+        Key8, Key9, Escape, Space, Enter, Backspace, LShift, RShift, Up
     )
 }
 #[derive(PartialEq)]
@@ -307,6 +308,7 @@ enum LabelingMode {
 }
 
 pub struct ScreenshotApp {
+    current_sub_img: Option<image::RgbaImage>,
     current_labeling_mode: Option<LabelingMode>,
     screenshot_path: String,
     keybind: String,
@@ -591,6 +593,7 @@ impl Default for ScreenshotApp {
             current_epochen: "".to_string(),
             rauthaus_das_man_gerade_labeled: LabelRathaus::Gemischt,
             ja_nein_idx: 0,
+            current_sub_img: None,
         };
 
         s.reload_models();
@@ -1092,6 +1095,15 @@ impl ScreenshotApp {
                     [sub_part.left() as usize, sub_part.top() as usize],
                     [sub_part.width() as usize, sub_part.height() as usize],
                 );
+
+                let sub_img = image::RgbaImage::from_raw(
+                    color_img.width() as u32,
+                    color_img.height() as u32,
+                    color_img.as_raw().to_vec(),
+                );
+
+                self.current_sub_img = Some(sub_img.unwrap());
+
                 self.image_texture =
                     Some(ctx.load_texture("selected_image", color_img, Default::default()));
             }
@@ -1329,7 +1341,12 @@ impl ScreenshotApp {
         });
     }
 
-    fn update_buildings(&mut self) {
+    fn update_buildings(
+        &mut self,
+        show_normal_buildings: bool,
+        show_walls: bool,
+        show_defences: bool,
+    ) {
         if self.current_buildings.is_some() {
             return;
         }
@@ -1358,6 +1375,12 @@ impl ScreenshotApp {
                 );
             }
         } else if let Ok(bldngs) = buildings {
+            let bldngs = filter_buildings::apply_filter(
+                &bldngs,
+                show_normal_buildings,
+                show_walls,
+                show_defences,
+            );
             self.current_buildings = Some(bldngs.clone());
             self.current_avg_conf = Some(image_data_wrapper::get_avg_confidence(&bldngs));
             self.create_error("Buildings Bekommen", MessageType::Success);
@@ -1377,6 +1400,14 @@ impl ScreenshotApp {
                 if let Some(img) = self.selected_image.clone() {
                     if let Some(mdl) = &self.selected_model {
                         if ui.button("Show Test").clicked() {
+                            self.current_buildings = None;
+
+                            self.get_building_thread.set_field(
+                                "buildings",
+                                Err::<Vec<image_data_wrapper::Building>, FofError>(
+                                    FofError::ThreadNotInitialized,
+                                ),
+                            );
                             self.get_building_thread
                                 .set_field("model_name", mdl.to_string());
                             self.get_building_thread
@@ -1410,7 +1441,7 @@ impl ScreenshotApp {
 
                             let rect = response.rect;
 
-                            self.update_buildings();
+                            self.update_buildings(true, true, true);
 
                             if let Some(buildings) = self.current_buildings.clone() {
                                 if let Some(avg) = self.current_avg_conf {
@@ -2302,6 +2333,7 @@ impl ScreenshotApp {
                     .set_field("path_to_image", "".to_string());
                 self.get_building_thread
                     .set_field("model_name", "".to_string());
+                self.ja_nein_idx = 0;
             } else {
                 self.labeling_que = self.selected_images.iter().cloned().collect();
                 self.create_error("Session gestartet", MessageType::Success);
@@ -2319,7 +2351,21 @@ impl ScreenshotApp {
             if !janein {
                 self.save_labeld_rects();
             } else {
-                todo!()
+                let save_path = format!(
+                    "JaNeinImgs/Nr{}{}",
+                    self.ja_nein_idx,
+                    self.labeling_que.last().unwrap().replace("/", "")
+                );
+                dbg!(&save_path);
+                let res = self
+                    .current_sub_img
+                    .clone()
+                    .unwrap()
+                    .save(save_path.clone());
+                dbg!(&res);
+                self.labeling_que.push(save_path);
+                self.save_labeld_rects();
+                self.labeling_que.pop();
             }
         }
 
@@ -2360,6 +2406,7 @@ impl ScreenshotApp {
                 .set_field("path_to_image", "".to_string());
             self.get_building_thread
                 .set_field("model_name", "".to_string());
+            self.ja_nein_idx = 0;
         }
         self.image_texture = None;
         self.labeled_rects.clear();
@@ -2441,7 +2488,19 @@ impl ScreenshotApp {
         }
 
         if let Some(labeling_mode) = self.current_labeling_mode.clone() {
-            self.session_button(ui);
+            if labeling_mode == LabelingMode::JaNein {
+                self.show_selectable_models(ui);
+                if let Some(model) = self.selected_model.clone() {
+                    if let Ok(image_data_wrapper::DatasetType::Level) =
+                        image_data_wrapper::get_dataset_type(&model)
+                    {
+                        ui.colored_label(Color32::YELLOW, "ACHTUNG!! das ausgewhählte model ist Ein Level Model, was nicht gut mit der JaNein Funktion funktioniert.");
+                    }
+                    self.session_button(ui);
+                }
+            } else {
+                self.session_button(ui);
+            }
 
             if is_running && labeling_mode == LabelingMode::Manual {
                 egui::ComboBox::from_label("Rathaus-Level auswählen")
@@ -2483,8 +2542,6 @@ impl ScreenshotApp {
                     ui.label("Kein Bild ausgewählt.");
                 }
             } else if is_running && labeling_mode == LabelingMode::JaNein {
-                self.show_selectable_models(ui);
-
                 if let Some(selected) = self.labeling_que.clone().last() {
                     if let Some(model) = &self.selected_model {
                         if let Some(builds) = self.current_buildings.clone() {
@@ -2503,7 +2560,7 @@ impl ScreenshotApp {
                                 self.update_image_texture_sub_img(
                                     ctx,
                                     selected.to_string(),
-                                    this_rect.expand(20.),
+                                    this_rect.expand(5.),
                                 );
                                 if let Some(texture) = &self.image_texture {
                                     let (img, scale) = self.get_scaled_texture(ui, texture);
@@ -2516,7 +2573,7 @@ impl ScreenshotApp {
                                     let scaled_rect = Rect::from_center_size(
                                         Pos2::new(0.5, 0.5),
                                         Vec2::new(1., 1.)
-                                            * (this_rect.size() / this_rect.expand(20.).size()),
+                                            * (this_rect.size() / this_rect.expand(5.).size()),
                                     );
 
                                     dbg!(&rect, &this_rect, &scale, &scaled_rect);
@@ -2541,7 +2598,7 @@ impl ScreenshotApp {
                                 .set_field("path_to_image", selected.clone());
                             self.get_building_thread
                                 .set_field("should_get_prediction", true);
-                            self.update_buildings();
+                            self.update_buildings(true, false, true);
                         }
                     }
                 }

@@ -121,7 +121,7 @@ fn get_rating(model_name: &str) -> Result<f64, FofError> {
     }
 }
 
-fn get_dataset_type(name: &str) -> Result<DatasetType, FofError> {
+pub fn get_dataset_type(name: &str) -> Result<DatasetType, FofError> {
     let path = format!("runs/detect/{}/args.yaml", name);
     println!("Searching for {}", path);
     let file = File::open(&path).map_err(|_| FofError::FailedReadingFile(path.clone()))?;

@@ -91,6 +91,6 @@ fn main() {
     // check_unique_prefixes(&class_names, prefix_length);
 
     // heheha goey
-    // ui::start_ui();
-    debug::run_tests();
+    ui::start_ui();
+    // debug::run_tests();
 }
