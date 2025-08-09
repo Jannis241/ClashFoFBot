@@ -5,7 +5,6 @@ pub use FofError::*;
 // Drittanbieter-Bibliotheken
 pub use chrono::Local;
 pub use csv::Reader;
-pub use device_query::{DeviceState, Keycode};
 pub use eframe;
 pub use eframe::egui;
 pub use eframe::egui::{Color32, RichText, StrokeKind};

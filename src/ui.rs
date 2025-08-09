@@ -1,8 +1,10 @@
 use crate::{prelude::*, threading::WorkerHandle};
-use eframe::egui::{text, Pos2, Vec2};
-use eframe::epaint::ColorMode;
+use eframe::egui::{
+    text,
+    Key::{self, *},
+    Pos2, Vec2,
+};
 use egui::{vec2, Rect};
-use image::GenericImage;
 
 pub fn start_ui() {
     let options = eframe::NativeOptions::default();
@@ -26,25 +28,6 @@ pub struct UiMessage {
     pub created: std::time::Instant,
 }
 
-macro_rules! generate_keycode_match {
-    ( $key:expr, $( $name:ident ),* ) => {{
-        use device_query::Keycode::*;
-        match $key.to_uppercase().as_str() {
-            $(
-                stringify!($name) => Some($name),
-            )*
-            _ => None,
-        }
-    }};
-}
-
-fn keycode_from_str(key: &str) -> Option<Keycode> {
-    generate_keycode_match!(
-        key, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, F1, F2,
-        F3, F4, F5, F6, F7, F8, F9, F10, F11, F12, Key0, Key1, Key2, Key3, Key4, Key5, Key6, Key7,
-        Key8, Key9, Escape, Space, Enter, Backspace, LShift, RShift, Up
-    )
-}
 #[derive(PartialEq)]
 enum Tab {
     Settings,
@@ -307,11 +290,27 @@ enum LabelingMode {
     JaNein,
 }
 
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+enum Function {
+    TakeScreenshot,
+    AutoComplete,
+    AddDivision,
+    SubtractDivision,
+    SaveImg,
+    SkipImg,
+}
+
+#[derive(Clone)]
+enum Keybind {
+    Choosing,
+    Done(Key),
+}
+
 pub struct ScreenshotApp {
     current_sub_img: Option<image::RgbaImage>,
     current_labeling_mode: Option<LabelingMode>,
     screenshot_path: String,
-    keybind: String,
+    keybinds: HashMap<Function, Keybind>,
     split_count: i32,
     preview_texture: Option<egui::TextureHandle>,
     selected_image: Option<String>,
@@ -558,7 +557,7 @@ impl Default for ScreenshotApp {
             split_count: 1,
             preview_texture: None,
             screenshot_path: "/home/jesko/programmieren/ClashFoFBot/images".to_string(),
-            keybind: "r".to_string(),
+            keybinds: HashMap::new(),
             selected_image: None,
             image_folder: Some(
                 PathBuf::from_str("/home/jesko/programmieren/ClashFoFBot/images").unwrap(),
@@ -597,6 +596,16 @@ impl Default for ScreenshotApp {
         };
 
         s.reload_models();
+        s.keybinds.insert(Function::SaveImg, Keybind::Done(Enter));
+        s.keybinds.insert(Function::SkipImg, Keybind::Done(ArrowUp));
+        s.keybinds
+            .insert(Function::AutoComplete, Keybind::Done(Space));
+        s.keybinds
+            .insert(Function::TakeScreenshot, Keybind::Done(R));
+        s.keybinds
+            .insert(Function::AddDivision, Keybind::Done(Plus));
+        s.keybinds
+            .insert(Function::SubtractDivision, Keybind::Done(Minus));
 
         s
     }
@@ -951,16 +960,7 @@ impl ScreenshotApp {
     }
 
     fn keybinds(&mut self, ui: &mut egui::Ui) {
-        ui.group(|ui| {
-            ui.heading("Einstellungen");
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.label("Screenshot-Taste:");
-                if ui.text_edit_singleline(&mut self.keybind).changed() {
-                    self.create_error("Keybind geändert", MessageType::Success);
-                }
-            });
-
+        ui.collapsing("Einstellungen", |ui: &mut egui::Ui| {
             if ui
                 .button("📂 Speicher Ordner der Screenshots wählen")
                 .clicked()
@@ -976,14 +976,60 @@ impl ScreenshotApp {
                 "📁 Ausgewähter Speicher Ordner: {}",
                 self.screenshot_path
             ));
+        });
+        ui.separator();
+        ui.collapsing("Keybinds", |ui| {
+            for func in [
+                Function::TakeScreenshot,
+                Function::AutoComplete,
+                Function::AddDivision,
+                Function::SubtractDivision,
+                Function::SaveImg,
+                Function::SkipImg,
+            ] {
+                ui.horizontal(|ui| {
+                    // Function name
+                    ui.label(format!("{:?}", func));
 
-            let state = DeviceState::new();
-            if state
-                .query_keymap()
-                .contains(&keycode_from_str(&self.keybind).unwrap_or(Keycode::V))
-            {
-                self.take_labeled_screenshot();
-                self.update_image_list();
+                    // Current key
+                    let current_key = match self.keybinds.get(&func) {
+                        Some(Keybind::Done(k)) => format!("{:?}", k),
+                        Some(Keybind::Choosing) => "…".to_string(),
+                        None => "None".to_string(),
+                    };
+                    ui.label(format!("Aktuell: {}", current_key));
+
+                    // Decide button style & label
+                    let is_choosing = matches!(self.keybinds.get(&func), Some(Keybind::Choosing));
+                    let (color, label) = if is_choosing {
+                        (Color32::YELLOW, "Taste drücken")
+                    } else {
+                        (Color32::DARK_GREEN, "Keybind ändern")
+                    };
+
+                    let button = egui::Button::new(label).fill(color);
+
+                    if ui.add(button).clicked() {
+                        if is_choosing {
+                            // Cancel choosing mode
+                            self.keybinds.insert(func.clone(), Keybind::Done(Key::A));
+                        // default?
+                        } else {
+                            // Enter choosing mode
+                            self.keybinds.insert(func.clone(), Keybind::Choosing);
+                        }
+                    }
+
+                    // If in choosing mode, detect key press
+                    if is_choosing {
+                        if let Some(key) = ui.input(|i| {
+                            i.keys_down.iter().next().cloned() // first pressed key
+                        }) {
+                            self.keybinds.insert(func.clone(), Keybind::Done(key));
+                        }
+                    }
+                });
+                ui.separator();
             }
         });
     }
@@ -1817,52 +1863,71 @@ impl ScreenshotApp {
                 for event in &ctx.input(|i| i.events.clone()) {
                     match event {
                         egui::Event::Text(text) => {
-                            if text == " " {
-                            } else if text == "+" || text == "-" {
-                            } else {
-                                r.push_str_to_label(text);
+                            if ('a'..'z')
+                                .map(|c| c.to_string())
+                                .collect::<Vec<String>>()
+                                .contains(text)
+                                || ('A'..'Z')
+                                    .map(|c| c.to_string())
+                                    .collect::<Vec<String>>()
+                                    .contains(text)
+                            {
+                                r.push_str_to_label(text.to_lowercase().as_str());
                             }
                         }
                         egui::Event::Key {
                             key, pressed: true, ..
-                        } => match key {
-                            egui::Key::Backspace => {
+                        } => {
+                            if key == &egui::Key::Backspace {
                                 r.pop();
-                            }
-                            egui::Key::Plus => {
-                                if let SmthLabeled::Line(li) = r {
-                                    li.divisions += 1;
+                            } else if let Some(keybind) = self.keybinds.get(&Function::AddDivision)
+                            {
+                                if let Keybind::Done(keybind) = keybind {
+                                    if keybind == key {
+                                        if let SmthLabeled::Line(li) = r {
+                                            li.divisions += 1;
+                                        }
+                                    }
                                 }
-                            }
-                            egui::Key::Minus => {
-                                if let SmthLabeled::Line(li) = r {
-                                    if li.divisions == 0 {
-                                    } else {
-                                        li.divisions -= 1;
+                            } else if let Some(keybind) =
+                                self.keybinds.get(&Function::SubtractDivision)
+                            {
+                                if let Keybind::Done(keybind) = keybind {
+                                    if keybind == key {
+                                        if let SmthLabeled::Line(li) = r {
+                                            if li.divisions != 0 {
+                                                li.divisions -= 1;
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if let Some(keybind) = self.keybinds.get(&Function::AutoComplete)
+                            {
+                                if let Keybind::Done(keybind) = keybind {
+                                    if keybind == key {
+                                        let trimmed = label.trim();
+                                        let matches: Vec<&String> = class_names
+                                            .iter()
+                                            .filter(|name| {
+                                                name.starts_with(trimmed) && *name != trimmed
+                                            })
+                                            .collect();
+
+                                        dbg!(&matches);
+
+                                        if matches.len() == 1 {
+                                            r.set_label(matches[0].clone());
+                                        } else {
+                                            let common_prefix =
+                                                ScreenshotApp::longest_common_prefix(&matches);
+                                            if common_prefix.len() > trimmed.len() {
+                                                r.set_label(common_prefix);
+                                            }
+                                        }
                                     }
                                 }
                             }
-                            egui::Key::Space => {
-                                let trimmed = label.trim();
-                                let matches: Vec<&String> = class_names
-                                    .iter()
-                                    .filter(|name| name.starts_with(trimmed) && *name != trimmed)
-                                    .collect();
-
-                                dbg!(&matches);
-
-                                if matches.len() == 1 {
-                                    r.set_label(matches[0].clone());
-                                } else {
-                                    let common_prefix =
-                                        ScreenshotApp::longest_common_prefix(&matches);
-                                    if common_prefix.len() > trimmed.len() {
-                                        r.set_label(common_prefix);
-                                    }
-                                }
-                            }
-                            _ => {}
-                        },
+                        }
                         _ => {}
                     }
                 }
@@ -2634,6 +2699,23 @@ impl eframe::App for ScreenshotApp {
             self.update_err(ui, ctx);
 
             let mut errors = vec![];
+            for event in &ctx.input(|i| i.events.clone()) {
+                match event {
+                    egui::Event::Key {
+                        key, pressed: true, ..
+                    } => {
+                        if let Some(keybind) = self.keybinds.get(&Function::TakeScreenshot) {
+                            if let Keybind::Done(keybind) = keybind {
+                                if keybind == key {
+                                    self.take_labeled_screenshot();
+                                    self.update_image_list();
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
 
             for thrd in self.train_threads.iter() {
                 if let Some(winterarc) = thrd.poll_field::<Arc<Mutex<TrainStatus>>>("status") {
