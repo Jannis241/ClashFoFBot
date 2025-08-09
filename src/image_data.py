@@ -105,6 +105,30 @@ def train_model(model_name, data_set_type, epochen):
 
     print("Training erfolgreich abgeschlossen.")
 
+def testvals(model_name,data_set_type):
+    model_path = f"runs/detect/{model_name}/weights/best.pt"
+    if data_set_type == "buildings":
+        DATA_YAML = "dataset_buildings/data.yaml"
+    else:
+        DATA_YAML = "dataset_level/data.yaml"
+
+    model = YOLO(model_path)
+    model.val(
+    data=DATA_YAML,
+    conf=0.3,
+    imgsz=960,
+    iou= 0.5,
+    visualize= True,
+    save=True,
+    save_txt=True,
+    save_conf=True,
+    project="testvals",
+    name=f"val_run_{model_name}",
+    batch=16,
+    plots=True,
+    verbose=True,
+    )
+
 
 
 def write_prediction_to_json(model_name, image_path):
@@ -142,6 +166,7 @@ parser = argparse.ArgumentParser(description="Trainings- und Vorhersagemodus fü
 parser.add_argument('--zahl_erkennen', action='store_true', help='zahl erkennen')
 parser.add_argument('--path', type=str, default=None, help='path zum image')
 parser.add_argument('--create-model', action='store_true', help='Erstelle ein neues Modell mit einem bestimmten Namen')
+parser.add_argument('--testvals', action='store_true', help='testvals')
 parser.add_argument('--train', action='store_true', help='Starte ein neues Training')
 parser.add_argument('--predict', action='store_true', help='Mache eine Vorhersage mit dem Modell')
 parser.add_argument('--model-name', type=str, default=None, help='Name des Modells / Verzeichnisses')
@@ -153,6 +178,9 @@ parser.add_argument('--dataset_type', type=str, default=None, help='')
 args = parser.parse_args()
 
 epochs = args.epochs
+
+if args.testvals:
+    testvals(args.model_name, args.data_set_type)
 
 
 if args.create_model:

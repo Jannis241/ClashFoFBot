@@ -118,6 +118,24 @@ fn get_rating(model_name: &str) -> Result<f64, FofError> {
     }
 }
 
+pub fn get_testvals(model_name: String) -> Result<(), FofError> {
+    let tt = get_dataset_type(model_name.as_str())?;
+    let t = match tt {
+        DatasetType::Level => "level",
+        DatasetType::Buildings => "buildings",
+    };
+    Command::new("python3")
+        .arg("src/image_data.py")
+        .arg("--testvals")
+        .arg("--model-name")
+        .arg(model_name)
+        .arg("--dataset_type")
+        .arg(t)
+        .output();
+
+    Ok(())
+}
+
 pub fn get_dataset_type(name: &str) -> Result<DatasetType, FofError> {
     let path = format!("runs/detect/{}/args.yaml", name);
     println!("Searching for {}", path);
