@@ -1,4 +1,80 @@
 use crate::{image_data_wrapper::Building, prelude::*};
+use std::collections::HashSet;
+
+fn get_similarity(bbox1: (f32, f32, f32, f32), bbox2: (f32, f32, f32, f32)) -> f32 {
+    let (x1_min, y1_min, x1_max, y1_max) = bbox1;
+    let (x2_min, y2_min, x2_max, y2_max) = bbox2;
+
+    let x_left = x1_min.max(x2_min);
+    let y_top = y1_min.max(y2_min);
+    let x_right = x1_max.min(x2_max);
+    let y_bottom = y1_max.min(y2_max);
+
+    if x_right < x_left || y_bottom < y_top {
+        return 0.0; // Kein Schnitt
+    }
+
+    let intersection_area = (x_right - x_left) * (y_bottom - y_top);
+
+    let bbox1_area = (x1_max - x1_min) * (y1_max - y1_min);
+    let bbox2_area = (x2_max - x2_min) * (y2_max - y2_min);
+
+    intersection_area / (bbox1_area + bbox2_area - intersection_area)
+}
+
+fn average_bbox(bbox1: (f32, f32, f32, f32), bbox2: (f32, f32, f32, f32)) -> (f32, f32, f32, f32) {
+    (
+        (bbox1.0 + bbox2.0) / 2.0, // top_left_x
+        (bbox1.1 + bbox2.1) / 2.0, // top_left_y
+        (bbox1.2 + bbox2.2) / 2.0, // bottom_right_x
+        (bbox1.3 + bbox2.3) / 2.0, // bottom_right_y
+    )
+}
+
+pub fn connect_level_and_buildings(
+    buildings: &Vec<Building>,
+    level: &Vec<Building>,
+    min_iou: f32,
+) -> Vec<Building> {
+    let mut result = Vec::new();
+    let mut seen = HashSet::new();
+
+    for building in buildings {
+        for lvl in level {
+            let iou = get_similarity(building.bounding_box, lvl.bounding_box);
+            if iou >= min_iou {
+                let avg_bbox = average_bbox(building.bounding_box, lvl.bounding_box);
+
+                let key = (
+                    building.class_name.clone(),
+                    lvl.class_name.clone(),
+                    bbox_to_key(avg_bbox),
+                );
+
+                if !seen.contains(&key) {
+                    seen.insert(key);
+                    result.push(Building {
+                        class_id: -1,
+                        class_name: format!("{}{}", building.class_name, lvl.class_name),
+                        confidence: -6.9,
+                        bounding_box: avg_bbox,
+                    });
+                }
+            }
+        }
+    }
+
+    result
+}
+
+fn bbox_to_key(bbox: (f32, f32, f32, f32)) -> (i32, i32, i32, i32) {
+    (
+        (bbox.0 * 1000.0).round() as i32,
+        (bbox.1 * 1000.0).round() as i32,
+        (bbox.2 * 1000.0).round() as i32,
+        (bbox.3 * 1000.0).round() as i32,
+    )
+}
 
 pub fn apply_filter(
     buildings: &Vec<Building>,

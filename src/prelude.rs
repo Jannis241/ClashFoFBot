@@ -14,11 +14,12 @@ pub use rand::Rng;
 pub use rfd;
 pub use screenshots::Screen;
 pub use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 pub use strum::IntoEnumIterator;
 pub use strum_macros::{Display, EnumIter};
 
 // Standardbibliothek – collections & errors
-pub use std::collections::{HashMap, HashSet};
+pub use std::collections::HashMap;
 pub use std::error::Error;
 pub use std::fmt::{Debug, Display};
 pub use std::fs::{self, copy, read_to_string, remove_file, write, File, OpenOptions};
