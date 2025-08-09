@@ -6,3 +6,5 @@
 - builings und mauern label zu einem kombinieren und im ui anzeigen.
 - filter (normal, defences, wall)
 - später: keybind settings speichern (auch wenn man es schließt)
+
+- eigene model test funktion machen das rating angezeigt wird und auf test images die prediction geholt wird mit anzegen was er richtig udn falsch hat etc
