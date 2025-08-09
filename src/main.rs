@@ -10,6 +10,7 @@ mod settings_manager;
 mod split_image;
 mod threading;
 mod ui;
+mod walls;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FofError {
