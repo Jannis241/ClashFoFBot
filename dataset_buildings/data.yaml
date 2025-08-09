@@ -18,7 +18,7 @@ names:
   14: xbogenluft
   15: dunklezauberfabrik
   16: entwicklungsturmkanone
-  17: feuerspeier
+  17: feuerspeieror
   18: bauhütte
   19: bombenturm
   20: gmine
@@ -58,4 +58,7 @@ names:
   54: fegerol
   55: entwicklungsturmbogenschützenturm
   56: mauer
+  57: feuerspeierol
+  58: feuerspeierur
+  59: feuerspeierul
 
