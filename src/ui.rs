@@ -183,7 +183,6 @@ struct TrainThread {
     child: Option<Result<Child, FofError>>,
     model_name: Option<String>,
     epochen: Option<usize>,
-    auto_start: Option<bool>,
     msg: Option<String>,
 }
 impl TrainThread {
@@ -192,14 +191,12 @@ impl TrainThread {
             child: None,
             epochen: None,
             model_name: None,
-            auto_start: None,
-            msg: None,
+            msg: Some(String::from("TESTESTSETSETSETSETSETSETSTESTE")),
         }
     }
-    fn start(&mut self, epochen: usize, model_name: String, auto_start: bool) {
+    fn start(&mut self, epochen: usize, model_name: String) {
         self.epochen = Some(epochen);
         self.model_name = Some(model_name);
-        self.auto_start = Some(auto_start);
 
         if let Some(epochen) = self.epochen {
             if let Some(model_name) = &self.model_name {
@@ -214,43 +211,6 @@ impl TrainThread {
         } else {
             self.msg = Some(String::from("Epochen sind nicht definiert"));
             self.stop();
-        }
-
-        while let Some(true) = self.auto_start {
-            if let Some(child) = self.child.as_mut() {
-                if let Ok(child) = child {
-                    if let Ok(Some(_)) = child.try_wait() {
-                        if let Some(epochen) = self.epochen {
-                            if let Some(model_name) = &self.model_name {
-                                self.child = Some(image_data_wrapper::start_training(
-                                    model_name.as_str(),
-                                    epochen as i32,
-                                ));
-                            } else {
-                                self.msg = Some(String::from("Model Name ist nicht definiert"));
-                                self.stop();
-                            }
-                        } else {
-                            self.msg = Some(String::from("Epochen sind nicht definiert"));
-                            self.stop();
-                        }
-                    } else if let Err(e) = child.try_wait() {
-                        self.msg = Some(format!("Error while trying to check Child: {:?}", e));
-                        self.stop();
-                    } else {
-                        self.msg =
-                            Some(String::from("Trainging Fertig, fängt Automatisch Neues An"));
-                    }
-                } else if let Err(e) = child {
-                    self.msg = Some(format!("Error beim Training Starten: {:?}", e));
-                    self.stop();
-                } else {
-                    unreachable!();
-                }
-            } else {
-                self.msg = Some(String::from("Child ist nicht definiert"));
-                self.stop();
-            }
         }
     }
 
@@ -1574,13 +1534,6 @@ impl ScreenshotApp {
 
             for thrd in self.train_threads.iter_mut() {
                 if thrd.model_name == self.selected_model && self.selected_model.is_some() {
-                    if let Some(auto_restart) = thrd.auto_start.as_mut() {
-                        ui.checkbox(auto_restart, "Auto Neustart: ");
-                        if !thrd.is_running() {
-                            return;
-                        }
-                    }
-
                     if thrd.is_running() {
                         let text = "Stop Training";
                         if ui
@@ -1592,6 +1545,7 @@ impl ScreenshotApp {
                         {
                             thrd.stop();
                             self.create_error("Training gestoppt", MessageType::Success);
+                            self.reload_models();
                         }
                         return;
                     }
@@ -1624,7 +1578,7 @@ impl ScreenshotApp {
                     return;
                 }
                 let mut thrd = TrainThread::new();
-                thrd.start(res.unwrap(), self.selected_model.clone().unwrap(), false);
+                thrd.start(res.unwrap(), self.selected_model.clone().unwrap());
 
                 self.train_threads.push(thrd);
                 self.create_error("Training gestartet", MessageType::Success);
@@ -1937,7 +1891,7 @@ impl ScreenshotApp {
         prefix.to_string()
     }
 
-    fn save_labeld_rects(&mut self) {
+    fn save_labeld_rects(&mut self, buildings_only: bool) {
         if let Some(image_path) = self.labeling_que.clone().last() {
             let mut rng = rand::thread_rng();
             self.create_error("Speichere YOLO-Labels...", MessageType::Success);
@@ -1966,10 +1920,14 @@ impl ScreenshotApp {
                 names: HashMap<usize, String>,
             }
 
-            let dataset_paths = [
+            let mut dataset_paths = vec![
                 ("dataset_buildings", Regex::new(r"\D+").unwrap()), // Nur Buchstaben
                 ("dataset_level", Regex::new(r"\d+").unwrap()),     // Nur Ziffern
             ];
+
+            if buildings_only {
+                dataset_paths.pop();
+            }
 
             for (idx, (dataset_base, label_regex)) in dataset_paths.iter().enumerate() {
                 let str_path = format!("{}/data.yaml", dataset_base);
@@ -2383,7 +2341,7 @@ impl ScreenshotApp {
     ) {
         if !skip {
             if !janein {
-                self.save_labeld_rects();
+                self.save_labeld_rects(false);
             } else {
                 let save_path = format!(
                     "JaNeinImgs/Nr{}{}",
@@ -2398,7 +2356,7 @@ impl ScreenshotApp {
                     .save(save_path.clone());
                 dbg!(&res);
                 self.labeling_que.push(save_path);
-                self.save_labeld_rects();
+                self.save_labeld_rects(true);
                 self.labeling_que.pop();
             }
         }
