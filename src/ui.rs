@@ -55,10 +55,8 @@ struct GetBuildingsThread {
 impl threading::AutoThread for GetBuildingsThread {
     fn run(&mut self) {
         if self.should_get_prediction {
-            dbg!(&self.buildings);
             self.buildings =
                 image_data_wrapper::get_prediction(&self.model_name.clone(), &self.path_to_image);
-            dbg!(&self.buildings);
             self.should_get_prediction = false;
         }
     }
@@ -192,7 +190,7 @@ impl TrainThread {
             child: None,
             epochen: None,
             model_name: None,
-            msg: Some(String::from("TESTESTSETSETSETSETSETSETSTESTE")),
+            msg: None,
         }
     }
     fn start(&mut self, epochen: usize, model_name: String) {
@@ -1476,6 +1474,7 @@ impl ScreenshotApp {
 
         for idx in idxes_to_remove {
             let t = self.train_threads.remove(idx);
+            self.reload_models();
         }
         ui.collapsing("Training", |ui: &mut egui::Ui| {
             self.current_models.sort_by(|a, b| {
@@ -1550,7 +1549,6 @@ impl ScreenshotApp {
                         {
                             thrd.stop();
                             self.create_error("Training gestoppt", MessageType::Success);
-                            self.reload_models();
                         }
                         return;
                     }

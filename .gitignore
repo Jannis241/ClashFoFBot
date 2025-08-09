@@ -35,6 +35,10 @@ target
 # /todo.txt
 # /Communication
 
+/dataset_buildings/labels/val.cache
+/dataset_buildings/labels/train.cache
+/dataset_level/labels/val.cache
+/dataset_level/labels/train.cache
 
 .DS_Store
 Thumbs.db
