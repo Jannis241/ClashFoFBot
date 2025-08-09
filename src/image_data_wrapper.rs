@@ -114,9 +114,7 @@ fn get_rating(model_name: &str) -> Result<f64, FofError> {
             "Error: No Metrics found for {}! (Model wurde wahrscheinlich nicht korrekt erstellt -> evtl. python error beim erstellen -> results.csv fehlt.)",
             model_name
         );
-        return Err(FofError::NoMetricsFoundForModel(
-            model_name.to_string(),
-        ));
+        return Err(FofError::NoMetricsFoundForModel(model_name.to_string()));
     }
 }
 
@@ -326,6 +324,10 @@ pub fn delete_model(model_name: &str) -> Option<FofError> {
 // --------
 //
 //
+//so benutzt man das hier @jesko:
+// let mut trainer = Trainer::new();
+// trainer.start_training("mein_model", 50)?;
+// trainer.stop_training()?;
 
 use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
