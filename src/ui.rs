@@ -1792,11 +1792,11 @@ impl ScreenshotApp {
                 for event in &ctx.input(|i| i.events.clone()) {
                     match event {
                         egui::Event::Text(text) => {
-                            if ('a'..'z')
+                            if ('a'..='z')
                                 .map(|c| c.to_string())
                                 .collect::<Vec<String>>()
                                 .contains(text)
-                                || ('A'..'Z')
+                                || ('A'..='Z')
                                     .map(|c| c.to_string())
                                     .collect::<Vec<String>>()
                                     .contains(text)
