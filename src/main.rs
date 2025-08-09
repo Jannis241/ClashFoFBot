@@ -35,6 +35,8 @@ pub enum FofError {
     UnsupportedDataset(String),
     IoError(String),
     NoStatsFound(String), // model name
+    NoTrainingRunning,
+    FailedToStopTraining,
 }
 
 impl From<io::Error> for FofError {

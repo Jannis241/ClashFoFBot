@@ -323,115 +323,68 @@ pub fn delete_model(model_name: &str) -> Option<FofError> {
     Some(FofError::ModelNotFound(model_name.to_string()))
 }
 
-pub fn train_model(model_name: &str, epochen: i32) -> Option<FofError> {
-    println!("Starte training für das model '{}'", model_name);
-    let dataset_type = match get_dataset_type(model_name) {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!(
-                "Error while trying to figure dataset of '{}' out: {:?}",
-                model_name, e
-            );
-            return Some(e);
+// --------
+//
+//
+
+use std::process::{Child, Command};
+use std::sync::{Arc, Mutex};
+
+pub struct Trainer {
+    child_process: Option<Child>,
+}
+
+impl Trainer {
+    pub fn new() -> Self {
+        Trainer {
+            child_process: None,
         }
-    };
-
-    let dataset_type = match dataset_type {
-        DatasetType::Level => "level",
-        DatasetType::Buildings => "buildings",
-    };
-
-    println!(
-        "Training: found out dataset for '{}' : {:?}",
-        model_name, dataset_type
-    );
-
-    let path = format!("runs/detect/{}", model_name);
-
-    if let Ok(false) = fs::exists(&path) {
-        eprintln!("Error: Model '{}' not found ({}).", model_name, path);
-        return Some(FofError::ModelNotFound(model_name.to_string()));
     }
 
-    println!(
-        "Found model '{}' in '{}'. Starting to train for {} epochs.",
-        model_name, path, epochen
-    );
+    // Startet das Training, speichert den Child-Prozess
+    pub fn start_training(&mut self, model_name: &str, epochen: i32) -> Result<(), FofError> {
+        let dataset_type = get_dataset_type(model_name)?;
+        let dataset_type_str = match dataset_type {
+            DatasetType::Level => "level",
+            DatasetType::Buildings => "buildings",
+        };
 
-    let start_time = time::OffsetDateTime::now_utc();
-
-    let start_rating = get_rating(model_name);
-
-    match Command::new("python3")
-        .arg("src/image_data.py")
-        .arg("--train")
-        .arg("--model-name")
-        .arg(model_name)
-        .arg("--epochs")
-        .arg(epochen.to_string())
-        .arg("--dataset_type")
-        .arg(dataset_type.to_string())
-        .output()
-    {
-        Ok(output) if output.status.success() => {
-            println!("{}", String::from_utf8_lossy(&output.stdout));
-            println!("Training complete.");
-
-            let end_time = time::OffsetDateTime::now_utc();
-
-            let training_time = end_time - start_time;
-
-            let num_of_epochs = epochen;
-            let end_rating = get_rating(model_name);
-
-            println!("\n📊 Training Stats:");
-            println!("─────────────────────────────");
-
-            println!("🔹 Startzeit         : {}", start_time);
-            println!("🔹 Endzeit           : {}", end_time);
-
-            let seconds = training_time.whole_seconds();
-            let hours = seconds / 3600;
-            let minutes = (seconds % 3600) / 60;
-            let secs = seconds % 60;
-
-            println!(
-                "🕒 Trainingsdauer    : {:02}h {:02}m {:02}s",
-                hours, minutes, secs
-            );
-
-            println!(
-                "📈 Start-Rating      : {:.2}",
-                start_rating.clone().unwrap()
-            );
-            println!("📉 End-Rating        : {:.2}", end_rating.clone().unwrap());
-
-            let rating_improvement = end_rating.clone().unwrap() - start_rating.clone().unwrap();
-            let avg_rating_per_epoche = rating_improvement / epochen as f64;
-            let training_hours = training_time.whole_seconds() as f64 / 3600.0;
-            let avg_rating_per_hour = if training_hours > 0.0 {
-                rating_improvement / training_hours
-            } else {
-                0.0
-            };
-
-            println!("➕ Verbesserung       : {:.2}", rating_improvement);
-            println!("📊 Ø Rating/Epoche   : {:.4}", avg_rating_per_epoche);
-            println!("⚡ Ø Rating/Stunde   : {:.4}", avg_rating_per_hour);
-            println!("🔁 Epochen           : {}", epochen);
-            println!("─────────────────────────────");
-
-            // epochen, start
-
-            None
+        let path = format!("runs/detect/{}", model_name);
+        if !fs::metadata(&path).is_ok() {
+            return Err(FofError::ModelNotFound(model_name.to_string()));
         }
-        Ok(output) => {
-            eprintln!("Python Error: {}", String::from_utf8_lossy(&output.stderr));
-            Some(FofError::PythonError(output.stderr))
-        }
-        Err(e) => {
-            eprintln!("Failed to start training process: {}", e);
-            Some(FofError::FailedToStartPython)
+
+        // Starten des Trainingsprozesses (async)
+        let child = Command::new("python3")
+            .arg("src/image_data.py")
+            .arg("--train")
+            .arg("--model-name")
+            .arg(model_name)
+            .arg("--epochs")
+            .arg(epochen.to_string())
+            .arg("--dataset_type")
+            .arg(dataset_type_str)
+            .spawn()
+            .map_err(|_| FofError::FailedToStartPython)?;
+
+        self.child_process = Some(child);
+        println!("Training gestartet für Modell '{}'", model_name);
+        Ok(())
+    }
+
+    // Stoppt den laufenden Trainingsprozess, falls einer existiert
+    pub fn stop_training(&mut self) -> Result<(), FofError> {
+        if let Some(child) = &mut self.child_process {
+            child.kill().map_err(|e| {
+                eprintln!("Fehler beim Stoppen des Trainings: {}", e);
+                FofError::FailedToStopTraining
+            })?;
+            println!("Training wurde gestoppt.");
+            self.child_process = None;
+            Ok(())
+        } else {
+            eprintln!("Kein laufendes Training zum Stoppen gefunden.");
+            Err(FofError::NoTrainingRunning)
         }
     }
 }
@@ -444,10 +397,6 @@ fn remove_communication() {
             println!("Successfully removed Communication directory.");
         }
     }
-}
-
-pub fn stop_training(model_name: &str) -> Option<FofError> {
-    None
 }
 
 pub fn get_prediction<P>(model_name: &str, screenshot_path: &P) -> Result<Vec<Building>, FofError>
