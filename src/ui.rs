@@ -303,7 +303,7 @@ enum Function {
     SkipImg,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum Keybind {
     Choosing,
     Done(Key),
@@ -1880,10 +1880,11 @@ impl ScreenshotApp {
                         egui::Event::Key {
                             key, pressed: true, ..
                         } => {
+                            dbg!(&key, &self.keybinds);
                             if key == &egui::Key::Backspace {
                                 r.pop();
-                            } else if let Some(keybind) = self.keybinds.get(&Function::AddDivision)
-                            {
+                            }
+                            if let Some(keybind) = self.keybinds.get(&Function::AddDivision) {
                                 if let Keybind::Done(keybind) = keybind {
                                     if keybind == key {
                                         if let SmthLabeled::Line(li) = r {
@@ -1891,21 +1892,22 @@ impl ScreenshotApp {
                                         }
                                     }
                                 }
-                            } else if let Some(keybind) =
-                                self.keybinds.get(&Function::SubtractDivision)
-                            {
+                            }
+                            if let Some(keybind) = self.keybinds.get(&Function::SubtractDivision) {
                                 if let Keybind::Done(keybind) = keybind {
                                     if keybind == key {
                                         if let SmthLabeled::Line(li) = r {
-                                            if li.divisions != 0 {
+                                            if li.divisions > 0 {
                                                 li.divisions -= 1;
                                             }
                                         }
                                     }
                                 }
-                            } else if let Some(keybind) = self.keybinds.get(&Function::AutoComplete)
-                            {
+                            }
+                            if let Some(keybind) = self.keybinds.get(&Function::AutoComplete) {
+                                dbg!(&keybind);
                                 if let Keybind::Done(keybind) = keybind {
+                                    dbg!(&keybind);
                                     if keybind == key {
                                         let trimmed = label.trim();
                                         let matches: Vec<&String> = class_names
