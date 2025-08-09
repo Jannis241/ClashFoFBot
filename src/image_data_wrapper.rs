@@ -124,16 +124,30 @@ pub fn get_testvals(model_name: String) -> Result<(), FofError> {
         DatasetType::Level => "level",
         DatasetType::Buildings => "buildings",
     };
-    Command::new("python3")
+    match Command::new("python3")
         .arg("src/image_data.py")
         .arg("--testvals")
         .arg("--model-name")
         .arg(model_name)
         .arg("--dataset_type")
         .arg(t)
-        .output();
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            println!("{}", String::from_utf8_lossy(&output.stdout));
+            println!("Python script executed.");
 
-    Ok(())
+            Ok(())
+        }
+        Ok(output) => {
+            eprintln!("Python error: {}", String::from_utf8_lossy(&output.stderr));
+            Err(FofError::PythonError(output.stderr))
+        }
+        Err(e) => {
+            eprintln!("Failed to start process: {}", e);
+            Err(FofError::FailedToStartPython)
+        }
+    }
 }
 
 pub fn get_dataset_type(name: &str) -> Result<DatasetType, FofError> {
