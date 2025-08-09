@@ -1,4 +1,4 @@
-- hardcoding fixxen
-- datasettype anzeigen im ui
-- gute settings finden
-- labellabeln
+- verstecke mauern simulieren und anzeigen
+- mauern linien im ui anzeigen
+- builings und mauern label zu einem kombinieren und im ui anzeigen.
+- filter (normal, defences, wall)
