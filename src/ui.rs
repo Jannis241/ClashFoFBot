@@ -604,7 +604,7 @@ impl Default for ScreenshotApp {
         s.keybinds
             .insert(Function::AutoComplete, Keybind::Done(Space));
         s.keybinds
-            .insert(Function::TakeScreenshot, Keybind::Done(R));
+            .insert(Function::TakeScreenshot, Keybind::Done(Period));
         s.keybinds
             .insert(Function::AddDivision, Keybind::Done(Plus));
         s.keybinds
@@ -2274,7 +2274,9 @@ impl ScreenshotApp {
             painter.rect_stroke(new_rect, 0.0, (2.0, RED), StrokeKind::Middle);
             if idx + 1 == all_labeled_rects.len() {
                 painter.text(
-                    lr.rect.left_top() * img_rect.width() + img_rect.left_top().to_vec2(),
+                    (lr.rect.left_top().to_vec2() * img_rect.size()
+                        + img_rect.left_top().to_vec2())
+                    .to_pos2(),
                     egui::Align2::LEFT_TOP,
                     &lr.label,
                     egui::TextStyle::Body.resolve(&ctx.style()),
