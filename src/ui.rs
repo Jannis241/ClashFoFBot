@@ -2343,11 +2343,7 @@ impl ScreenshotApp {
             if !janein {
                 self.save_labeld_rects(false);
             } else {
-                let save_path = format!(
-                    "JaNeinImgs/Nr{}{}",
-                    self.ja_nein_idx,
-                    self.labeling_que.last().unwrap().replace("/", "")
-                );
+                let save_path = "JaNeinImgs/DuAALhihihihfof".to_string();
                 dbg!(&save_path);
                 let res = self
                     .current_sub_img
