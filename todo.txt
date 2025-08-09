@@ -1,3 +1,5 @@
+- model übersicht machen
+- das rating nach ende des trainings updaten
 - training stoppen funktion (gucken ob das mit dem winter arc funtioniert)
 - verstecke mauern simulieren und anzeigen
 - mauern linien im ui anzeigen
