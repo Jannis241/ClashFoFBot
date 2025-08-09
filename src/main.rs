@@ -1,6 +1,8 @@
 use crate::prelude::*;
+
 mod bot_actions;
 mod debug;
+mod filter_buildings;
 mod image_data_wrapper;
 mod prelude;
 mod screener;
@@ -75,22 +77,19 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
 fn main() {
-    let file_content =
-        fs::read_to_string("dataset_buildings/data.yaml").expect("Kann Datei nicht lesen");
+    // conflicts
+    // let file_content =
+    //     fs::read_to_string("dataset_buildings/data.yaml").expect("Kann Datei nicht lesen");
+    //
+    // let data: YamlData =
+    //     serde_yaml::from_str(&file_content).expect("Fehler beim Parsen der YAML-Datei");
+    //
+    // let class_names: Vec<String> = data.names.values().cloned().collect();
+    //
+    // let prefix_length = 3; // Anzahl der Buchstaben, die als Präfix geprüft werden
+    // check_unique_prefixes(&class_names, prefix_length);
 
-    let data: YamlData =
-        serde_yaml::from_str(&file_content).expect("Fehler beim Parsen der YAML-Datei");
-
-    let class_names: Vec<String> = data.names.values().cloned().collect();
-
-    let prefix_length = 3; // Anzahl der Buchstaben, die als Präfix geprüft werden
-    check_unique_prefixes(&class_names, prefix_length);
-
-    // split_image::split(
-    //     "/Users/maus/Downloads/th_13.webp",
-    //     9,
-    //     "/Users/maus/Downloads/splits",
-    // );
-    ui::start_ui();
-    // debug::run_tests();
+    // heheha goey
+    // ui::start_ui();
+    debug::run_tests();
 }
