@@ -1,5 +1,6 @@
 use crate::{prelude::*, threading::WorkerHandle};
 use eframe::egui::{
+    vec2,
     Key::{self, *},
     Pos2, Vec2,
 };
@@ -40,140 +41,9 @@ enum Tab {
 }
 
 use crate::threading::*;
-use std::any::Any;
 use std::sync::{Arc, Mutex};
+use std::{any::Any, process::Child};
 use std::{i128, vec};
-
-#[derive(Clone, Debug)]
-enum TrainStatus {
-    Idle,
-    Running,
-    Done(Option<FofError>),
-}
-
-struct TrainThread {
-    model_name: String,
-    status: Arc<Mutex<TrainStatus>>,
-    request_start: Arc<Mutex<bool>>,
-    epochen: Option<usize>,
-    stop: Arc<Mutex<bool>>,
-    auto_restart: Arc<AtomicBool>,
-}
-
-impl AutoThread for TrainThread {
-    fn run(&mut self) {
-        // Check if training was requested
-        let should_start = {
-            let mut start_flag = self.request_start.lock().unwrap();
-            if *start_flag {
-                *start_flag = false; // reset it immediately
-                true
-            } else {
-                false
-            }
-        };
-
-        if should_start {
-            let model = self.model_name.clone();
-            let status_ref = Arc::clone(&self.status);
-            let stop_ref = Arc::clone(&self.stop);
-            let request_start_ref = Arc::clone(&self.request_start);
-            let epochen = self.epochen.expect("Epochen not set!") as i32;
-            let auto_restart = Arc::clone(&self.auto_restart);
-
-            // Set status to Running
-            {
-                let mut status = status_ref.lock().unwrap();
-                *status = TrainStatus::Running;
-            }
-
-            // Spawn training thread
-            thread::spawn(move || {
-                dbg!("starting");
-                let result = image_data_wrapper::train_model(&model, epochen);
-
-                {
-                    let mut status = status_ref.lock().unwrap();
-                    *status = TrainStatus::Done(result);
-                }
-
-                if auto_restart.load(Ordering::SeqCst) {
-                    let mut start_again = request_start_ref.lock().unwrap();
-                    *start_again = true;
-
-                    dbg!("auto starting..");
-                } else {
-                    dbg!("stopping");
-                    let mut stop = stop_ref.lock().unwrap();
-                    *stop = true;
-                }
-            });
-        }
-
-        if *self.stop.lock().unwrap() {
-            // image_data_wrapper::stop_training(self.model_name);
-        }
-    }
-
-    fn handle_field_set(&mut self, field: &str, value: Box<dyn Any + Send>) {
-        match field {
-            "auto_restart" => {
-                if let Ok(val) = value.downcast::<bool>() {
-                    self.auto_restart.store(*val, Ordering::SeqCst);
-                    return;
-                }
-            }
-            "request_start" => {
-                if let Ok(val) = value.downcast::<Arc<Mutex<bool>>>() {
-                    self.request_start = *val;
-                    return;
-                }
-            }
-            "model_name" => {
-                if let Ok(val) = value.downcast::<String>() {
-                    self.model_name = *val;
-                    return;
-                }
-            }
-            "epochen" => {
-                if let Ok(val) = value.downcast::<Option<usize>>() {
-                    self.epochen = *val;
-                    return;
-                }
-            }
-            "stop" => {
-                if let Ok(val) = value.downcast::<Arc<Mutex<bool>>>() {
-                    self.stop = *val;
-                    return;
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn handle_field_get(&self, field: &str) -> Option<Box<dyn Any + Send>> {
-        auto_get_field!(self, field, {
-            "model_name" => model_name: String,
-            "status" => status: Arc<Mutex<TrainStatus>>,
-            "stop" => stop: Arc<Mutex<bool>>,
-            "epochen" => epochen: Option<usize>,
-            "auto_restart" => auto_restart: Arc<AtomicBool>
-        })
-    }
-}
-
-impl TrainThread {
-    fn new(model_name: String, epochen: usize) -> Self {
-        Self {
-            model_name,
-            status: Arc::new(Mutex::new(TrainStatus::Idle)),
-            request_start: Arc::new(Mutex::new(true)), // direkt starten!
-            epochen: Some(epochen),
-            stop: Arc::new(Mutex::new(false)),
-            auto_restart: Arc::new(AtomicBool::new(false)),
-        }
-    }
-}
 
 struct GetBuildingsThread {
     path_to_image: String,
@@ -309,6 +179,120 @@ enum Keybind {
     Done(Key),
 }
 
+struct TrainThread {
+    child: Option<Result<Child, FofError>>,
+    model_name: Option<String>,
+    epochen: Option<usize>,
+    auto_start: Option<bool>,
+    msg: Option<String>,
+}
+impl TrainThread {
+    fn new() -> TrainThread {
+        TrainThread {
+            child: None,
+            epochen: None,
+            model_name: None,
+            auto_start: None,
+            msg: None,
+        }
+    }
+    fn start(&mut self, epochen: usize, model_name: String, auto_start: bool) {
+        self.epochen = Some(epochen);
+        self.model_name = Some(model_name);
+        self.auto_start = Some(auto_start);
+
+        if let Some(epochen) = self.epochen {
+            if let Some(model_name) = &self.model_name {
+                self.child = Some(image_data_wrapper::start_training(
+                    model_name.as_str(),
+                    epochen as i32,
+                ));
+            } else {
+                self.msg = Some(String::from("Model Name ist nicht definiert"));
+                self.stop();
+            }
+        } else {
+            self.msg = Some(String::from("Epochen sind nicht definiert"));
+            self.stop();
+        }
+
+        while let Some(true) = self.auto_start {
+            if let Some(child) = self.child.as_mut() {
+                if let Ok(child) = child {
+                    if let Ok(Some(_)) = child.try_wait() {
+                        if let Some(epochen) = self.epochen {
+                            if let Some(model_name) = &self.model_name {
+                                self.child = Some(image_data_wrapper::start_training(
+                                    model_name.as_str(),
+                                    epochen as i32,
+                                ));
+                            } else {
+                                self.msg = Some(String::from("Model Name ist nicht definiert"));
+                                self.stop();
+                            }
+                        } else {
+                            self.msg = Some(String::from("Epochen sind nicht definiert"));
+                            self.stop();
+                        }
+                    } else if let Err(e) = child.try_wait() {
+                        self.msg = Some(format!("Error while trying to check Child: {:?}", e));
+                        self.stop();
+                    } else {
+                        self.msg =
+                            Some(String::from("Trainging Fertig, fängt Automatisch Neues An"));
+                    }
+                } else if let Err(e) = child {
+                    self.msg = Some(format!("Error beim Training Starten: {:?}", e));
+                    self.stop();
+                } else {
+                    unreachable!();
+                }
+            } else {
+                self.msg = Some(String::from("Child ist nicht definiert"));
+                self.stop();
+            }
+        }
+    }
+
+    fn is_running(&mut self) -> bool {
+        if let Some(child) = self.child.as_mut() {
+            if let Ok(child) = child {
+                if let Ok(Some(_)) = child.try_wait() {
+                    return false;
+                } else if let Err(e) = child.try_wait() {
+                    self.msg = Some(format!("Error while trying to check Child: {:?}", e));
+                    return false;
+                } else {
+                    return true;
+                }
+            } else if let Err(e) = child {
+                self.msg = Some(format!("Error beim Training Starten: {:?}", e));
+                return false;
+            } else {
+                unreachable!();
+            }
+        } else {
+            self.msg = Some(String::from("Child ist nicht definiert"));
+            return false;
+        }
+        false
+    }
+
+    fn stop(&mut self) {
+        if let Some(child) = self.child.as_mut() {
+            if let Ok(child) = child {
+                image_data_wrapper::stop_training(child);
+            } else if let Err(e) = child {
+                self.msg = Some(format!("Error beim Training Starten: {:?}", e));
+            } else {
+                unreachable!();
+            }
+        } else {
+            self.msg = Some(String::from("Child ist nicht definiert"));
+        }
+    }
+}
+
 pub struct ScreenshotApp {
     current_sub_img: Option<image::RgbaImage>,
     current_labeling_mode: Option<LabelingMode>,
@@ -324,7 +308,7 @@ pub struct ScreenshotApp {
     messages: Vec<UiMessage>,
     labeling_que: Vec<String>,
     selected_images: HashSet<String>,
-    train_threads: Vec<threading::WorkerHandle<TrainThread>>,
+    train_threads: Vec<TrainThread>,
     get_building_thread: threading::WorkerHandle<GetBuildingsThread>,
     current_buildings: Option<Vec<image_data_wrapper::Building>>,
     active_tab: Tab,
@@ -1519,22 +1503,14 @@ impl ScreenshotApp {
 
     fn model_training(&mut self, ui: &mut egui::Ui) {
         let mut idxes_to_remove = vec![];
-
-        for (idx, thrd) in self.train_threads.iter().enumerate() {
-            let _ = thrd.poll_field::<String>("model_name");
-            //dummy call damit der thrd sich aufwärmen kann (bro ist 60)
-
-            if let Some(wi) = thrd.poll_field::<Arc<Mutex<bool>>>("stop") {
-                let should_stop = *wi.lock().unwrap();
-                if should_stop {
-                    idxes_to_remove.push(idx);
-                }
+        for (idx, thrd) in self.train_threads.iter_mut().enumerate() {
+            if !thrd.is_running() {
+                idxes_to_remove.push(idx);
             }
         }
 
         for idx in idxes_to_remove {
             let t = self.train_threads.remove(idx);
-            t.stop();
         }
         ui.collapsing("Training", |ui: &mut egui::Ui| {
             self.current_models.sort_by(|a, b| {
@@ -1559,18 +1535,11 @@ impl ScreenshotApp {
 
                         let m = Some(model.name);
 
-                        for (idx, thrd) in self.train_threads.iter().enumerate() {
-                            let mut thrd_model_name = None;
-
-                            while thrd_model_name.is_none() {
-                                thrd_model_name = thrd.poll_field::<String>("model_name");
-                            }
-
-                            if m == thrd_model_name {
-                                is_training = true;
-                                if let Some(eps) = thrd.poll_field::<Option<usize>>("epochen") {
-                                    epochs = eps;
-                                }
+                        for (idx, thrd) in self.train_threads.iter_mut().enumerate() {
+                            if m == thrd.model_name {
+                                is_training = thrd.is_running();
+                                epochs = thrd.epochen;
+                                break;
                             }
                         }
 
@@ -1604,13 +1573,11 @@ impl ScreenshotApp {
                 });
 
             for thrd in self.train_threads.iter_mut() {
-                if thrd.poll_field::<String>("model_name") == self.selected_model
-                    && self.selected_model.is_some()
-                {
-                    if let Some(auto_restart) = thrd.poll_field::<Arc<AtomicBool>>("auto_restart") {
-                        let mut auto_restart = auto_restart.load(Ordering::SeqCst);
-                        if ui.checkbox(&mut auto_restart, "Auto Neustart: ").changed() {
-                            thrd.set_field("auto_restart", auto_restart);
+                if thrd.model_name == self.selected_model && self.selected_model.is_some() {
+                    if let Some(auto_restart) = thrd.auto_start.as_mut() {
+                        ui.checkbox(auto_restart, "Auto Neustart: ");
+                        if !thrd.is_running() {
+                            return;
                         }
                     }
 
@@ -1623,9 +1590,7 @@ impl ScreenshotApp {
                             )
                             .clicked()
                         {
-                            thrd.set_field("stop", Arc::new(Mutex::new(true)));
-                            //HARDCODE ALARM!!!
-                            thrd.set_field("auto_restart", false);
+                            thrd.stop();
                             self.create_error("Training gestoppt", MessageType::Success);
                         }
                         return;
@@ -1658,12 +1623,10 @@ impl ScreenshotApp {
                     );
                     return;
                 }
+                let mut thrd = TrainThread::new();
+                thrd.start(res.unwrap(), self.selected_model.clone().unwrap(), false);
 
-                let wrkh = WorkerHandle::start(
-                    TrainThread::new(self.selected_model.clone().unwrap(), res.unwrap()),
-                    true,
-                );
-                self.train_threads.push(wrkh);
+                self.train_threads.push(thrd);
                 self.create_error("Training gestartet", MessageType::Success);
             }
         });
@@ -2704,7 +2667,6 @@ impl eframe::App for ScreenshotApp {
             }
             self.update_err(ui, ctx);
 
-            let mut errors = vec![];
             for event in &ctx.input(|i| i.events.clone()) {
                 match event {
                     egui::Event::Key {
@@ -2722,18 +2684,21 @@ impl eframe::App for ScreenshotApp {
                     _ => {}
                 }
             }
+            let mut errors = vec![];
 
-            for thrd in self.train_threads.iter() {
-                if let Some(winterarc) = thrd.poll_field::<Arc<Mutex<TrainStatus>>>("status") {
-                    let trainingstatus = winterarc.lock().unwrap().clone();
-                    if let TrainStatus::Done(Some(e)) = trainingstatus {
-                        errors.push(e);
-                    }
+            for thrd in &self.train_threads {
+                if let Some(msg) = &thrd.msg {
+                    let kind = if msg == "Trainging Fertig, fängt Automatisch Neues An" {
+                        MessageType::Success
+                    } else {
+                        MessageType::Error
+                    };
+                    errors.push((kind, msg.clone()));
                 }
             }
 
-            for e in errors {
-                self.create_error(format!("Error while Training: {:?}", e), MessageType::Error);
+            for (kind, msg) in errors {
+                self.create_error(msg, kind);
             }
         });
     }
