@@ -1597,6 +1597,9 @@ impl ScreenshotApp {
         ui.separator();
         self.model_testen(ui, ctx);
         ui.separator();
+        if ui.button("Generate TestVals").clicked() {
+            image_data_wrapper::get_testvals();
+        }
     }
 
     fn extract_numbers(s: &str) -> Vec<i32> {
