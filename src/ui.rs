@@ -1597,9 +1597,14 @@ impl ScreenshotApp {
         ui.separator();
         self.model_testen(ui, ctx);
         ui.separator();
-        if ui.button("Generate TestVals").clicked() {
-            image_data_wrapper::get_testvals();
-        }
+        ui.collapsing("TestVals", |ui| {
+            self.show_selectable_models(ui);
+            if let Some(sm) = self.selected_model {
+                if ui.button("Generate TestVals").clicked() {
+                    image_data_wrapper::get_testvals(sm);
+                }
+            }
+        });
     }
 
     fn extract_numbers(s: &str) -> Vec<i32> {
