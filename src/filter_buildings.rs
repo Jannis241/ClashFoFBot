@@ -1,5 +1,4 @@
 use crate::{image_data_wrapper::Building, prelude::*};
-use std::collections::HashSet;
 
 fn get_similarity(bbox1: (f32, f32, f32, f32), bbox2: (f32, f32, f32, f32)) -> f32 {
     let (x1_min, y1_min, x1_max, y1_max) = bbox1;

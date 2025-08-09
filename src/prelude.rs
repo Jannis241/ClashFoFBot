@@ -14,7 +14,7 @@ pub use rand::Rng;
 pub use rfd;
 pub use screenshots::Screen;
 pub use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+pub use std::collections::HashSet;
 pub use strum::IntoEnumIterator;
 pub use strum_macros::{Display, EnumIter};
 
@@ -37,4 +37,4 @@ pub use std::thread::{self, JoinHandle};
 pub use std::time::Duration;
 
 pub use std::io;
-use time::*;
+pub use time::*;
