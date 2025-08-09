@@ -1599,7 +1599,7 @@ impl ScreenshotApp {
         ui.separator();
         ui.collapsing("TestVals", |ui| {
             self.show_selectable_models(ui);
-            if let Some(sm) = self.selected_model {
+            if let Some(sm) = self.selected_model.clone() {
                 if ui.button("Generate TestVals").clicked() {
                     self.create_error("Gereating TestVals...", MessageType::Success);
                     let res = image_data_wrapper::get_testvals(sm);
