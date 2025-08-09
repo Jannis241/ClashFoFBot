@@ -54,7 +54,8 @@ def train_model(model_name, data_set_type, epochen):
     data=DATA_YAML,
     epochs=epochen,
     imgsz=960,                 # Reicht meistens, 1280 wäre overkill
-    batch=8,                   # je nach VRAM
+    batch=1,                   # je nach VRAM
+        accumulate=8 #nur für die ubutuntu user
     optimizer="AdamW",
     lr0=0.001,
     lrf=0.01,
