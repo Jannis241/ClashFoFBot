@@ -26,5 +26,8 @@ else
     echo "requirements.txt nicht gefunden!"
 fi
 
-echo "Setup abgeschlossen. Um die virtuelle Umgebung zu nutzen, führe aus: source $VENV_DIR/bin/activate"
+pip3 install -r requirements.txt
 
+# Todo: diese python ding da für nummern erkennen hier downloaden von git oder so
+
+echo "Setup abgeschlossen"
