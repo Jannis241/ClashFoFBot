@@ -54,8 +54,8 @@ enum Tab {
 
 use crate::threading::*;
 use std::any::Any;
-use std::i128;
 use std::sync::{Arc, Mutex};
+use std::{i128, vec};
 
 #[derive(Clone, Debug)]
 enum TrainStatus {
@@ -216,6 +216,7 @@ impl threading::AutoThread for GetBuildingsThread {
         auto_set_field!(self, field, value, {
             "model_name" => model_name: String,
             "path_to_image"=> path_to_image: String,
+            "buildings" => buildings: Result<Vec<image_data_wrapper::Building>, FofError>,
             "should_get_prediction" => should_get_prediction: bool
         })
     }
@@ -1088,14 +1089,8 @@ impl ScreenshotApp {
                 let size = [img.width() as usize, img.height() as usize];
                 let color_img = egui::ColorImage::from_rgba_unmultiplied(size, &img.into_raw());
                 let color_img = color_img.region_by_pixels(
-                    [
-                        (sub_part.left() * size[0] as f32) as usize,
-                        (sub_part.top() * size[1] as f32) as usize,
-                    ],
-                    [
-                        (sub_part.width() * size[0] as f32) as usize,
-                        (sub_part.height() * size[1] as f32) as usize,
-                    ],
+                    [sub_part.left() as usize, sub_part.top() as usize],
+                    [sub_part.width() as usize, sub_part.height() as usize],
                 );
                 self.image_texture =
                     Some(ctx.load_texture("selected_image", color_img, Default::default()));
@@ -1879,7 +1874,7 @@ impl ScreenshotApp {
         prefix.to_string()
     }
 
-    fn save_labeld_rects(&mut self, final_size: egui::Vec2) {
+    fn save_labeld_rects(&mut self) {
         if let Some(image_path) = self.labeling_que.clone().last() {
             let mut rng = rand::thread_rng();
             self.create_error("Speichere YOLO-Labels...", MessageType::Success);
@@ -2253,11 +2248,21 @@ impl ScreenshotApp {
 
         let (button_text, button_color) = if is_running {
             (
-                format!(
-                    "Stop Session({}/{} Bildern Gelabelt)",
-                    self.selected_images.len() - self.labeling_que.len(),
-                    self.selected_images.len()
-                ),
+                if self.current_labeling_mode == Some(LabelingMode::Manual) {
+                    format!(
+                        "Stop Session({}/{} Bildern Gelabelt)",
+                        self.selected_images.len() - self.labeling_que.len(),
+                        self.selected_images.len()
+                    )
+                } else {
+                    format!(
+                        "Stop Session({}/{} Bildern Gelabelt | {}/{} buildings)",
+                        self.selected_images.len() - self.labeling_que.len(),
+                        self.selected_images.len(),
+                        self.ja_nein_idx,
+                        self.current_buildings.clone().unwrap_or(vec![]).len()
+                    )
+                },
                 Color32::from_rgb(200, 50, 50),
             ) // rot
         } else {
@@ -2285,11 +2290,79 @@ impl ScreenshotApp {
                 self.create_error("Session beendet", MessageType::Success);
                 self.current_labeling_mode = None;
                 self.rauthaus_das_man_gerade_labeled = LabelRathaus::Gemischt;
+                self.selected_model = None;
+                self.current_buildings = None;
+                self.get_building_thread.set_field(
+                    "buildings",
+                    Err::<Vec<image_data_wrapper::Building>, FofError>(
+                        FofError::ThreadNotInitialized,
+                    ),
+                );
+                self.get_building_thread
+                    .set_field("path_to_image", "".to_string());
+                self.get_building_thread
+                    .set_field("model_name", "".to_string());
             } else {
                 self.labeling_que = self.selected_images.iter().cloned().collect();
                 self.create_error("Session gestartet", MessageType::Success);
             }
         }
+    }
+
+    fn reset_labeling(
+        &mut self,
+        skip: bool,
+        janein: bool,
+        buildings: Vec<image_data_wrapper::Building>,
+    ) {
+        if !skip {
+            if !janein {
+                self.save_labeld_rects();
+            } else {
+                todo!()
+            }
+        }
+
+        if !janein {
+            self.labeling_que.pop();
+        } else {
+            self.ja_nein_idx += 1;
+            if self.ja_nein_idx >= buildings.len() {
+                self.labeling_que.pop();
+                self.ja_nein_idx = 0;
+                self.get_building_thread.set_field(
+                    "buildings",
+                    Err::<Vec<image_data_wrapper::Building>, FofError>(
+                        FofError::ThreadNotInitialized,
+                    ),
+                );
+                self.get_building_thread
+                    .set_field("path_to_image", "".to_string());
+                self.get_building_thread
+                    .set_field("model_name", "".to_string());
+            }
+        }
+
+        if self.labeling_que.is_empty() {
+            self.labeling_que.clear();
+            self.selected_images.clear();
+            self.labeled_rects.clear();
+
+            self.current_labeling_mode = None;
+            self.rauthaus_das_man_gerade_labeled = LabelRathaus::Gemischt;
+            self.selected_model = None;
+            self.current_buildings = None;
+            self.get_building_thread.set_field(
+                "buildings",
+                Err::<Vec<image_data_wrapper::Building>, FofError>(FofError::ThreadNotInitialized),
+            );
+            self.get_building_thread
+                .set_field("path_to_image", "".to_string());
+            self.get_building_thread
+                .set_field("model_name", "".to_string());
+        }
+        self.image_texture = None;
+        self.labeled_rects.clear();
     }
 
     fn yolo_label(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -2384,14 +2457,6 @@ impl ScreenshotApp {
                     });
 
                 if let Some(selected) = self.labeling_que.last() {
-                    // let img_is_origional = self.selected_images.contains(selected);
-                    //
-                    // if img_is_origional {
-                    //     ui.colored_label(Color32::GREEN, "Eigenes Bild (unmultipliziert) Enter = speichern(mit multiplikation) | UpArrow = überspringen");
-                    // } else {
-                    //     ui.colored_label(Color32::RED, "nicht Originelles Bild (multipliziert) Enter = speichern(mit multiplikation) | UpArrow = überspringen");
-                    // }
-                    //
                     self.update_image_texture(ctx, selected.to_string());
 
                     if let Some(texture) = &self.image_texture {
@@ -2404,44 +2469,11 @@ impl ScreenshotApp {
                         self.add_lable_to_yaml(ctx);
 
                         if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-                            self.save_labeld_rects(rect.size());
-                            let img_to_multiply = self.labeling_que.pop();
-
-                            // if img_is_origional {
-                            //     let res = patch_and_save_image_no_overlap(
-                            //         img_to_multiply.expect("WIEEEE IST DAS PASSIERT???? GELG FOFEIER"),
-                            //         "sceneries/Szene1.webp".to_string(),
-                            //         self.labeled_rects.clone(),
-                            //         scale,
-                            //     );
-                            //
-                            //     let (path_to_new_img, rects) =
-                            //         res.expect("Bro Das kann nicht mehr sein FOFOFOFOFO");
-                            //
-                            //     self.labeling_que
-                            //         .push(path_to_new_img.to_str().unwrap().to_string());
-                            //     self.labeled_rects = rects;
-                            // }
-
-                            if self.labeling_que.is_empty() {
-                                self.selected_images.clear();
-                                self.current_labeling_mode = None;
-                                self.rauthaus_das_man_gerade_labeled = LabelRathaus::Gemischt;
-                                self.labeled_rects.clear();
-                            }
-                            // if !img_is_origional || self.labeling_que.is_empty() {
-                            //     self.labeled_rects.clear();
-                            // }
-                            self.image_texture = None;
+                            self.reset_labeling(false, false, vec![]);
                         }
 
                         if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
-                            self.labeling_que.pop();
-                            if self.labeling_que.is_empty() {
-                                self.selected_images.clear();
-                            }
-                            self.image_texture = None;
-                            self.labeled_rects.clear();
+                            self.reset_labeling(true, false, vec![]);
                             self.create_error("Bild Übersprungen", MessageType::Success);
                         }
 
@@ -2455,25 +2487,61 @@ impl ScreenshotApp {
 
                 if let Some(selected) = self.labeling_que.clone().last() {
                     if let Some(model) = &self.selected_model {
-                        self.update_buildings();
-                        if let Some(builds) = &self.current_buildings {
+                        if let Some(builds) = self.current_buildings.clone() {
                             if let Some(this_building) = builds.get(self.ja_nein_idx) {
+                                let this_rect = Rect::from_two_pos(
+                                    Pos2::new(
+                                        this_building.bounding_box.0,
+                                        this_building.bounding_box.1,
+                                    ),
+                                    Pos2::new(
+                                        this_building.bounding_box.2,
+                                        this_building.bounding_box.3,
+                                    ),
+                                );
+
                                 self.update_image_texture_sub_img(
                                     ctx,
                                     selected.to_string(),
-                                    Rect::from_two_pos(
-                                        Pos2::new(
-                                            this_building.bounding_box.0,
-                                            this_building.bounding_box.1,
-                                        ),
-                                        Pos2::new(
-                                            this_building.bounding_box.2,
-                                            this_building.bounding_box.3,
-                                        ),
-                                    )
-                                    .expand(0.01),
+                                    this_rect.expand(20.),
                                 );
+                                if let Some(texture) = &self.image_texture {
+                                    let (img, scale) = self.get_scaled_texture(ui, texture);
+                                    let response = ui.add(img);
+
+                                    // Das gezeichnete Rechteck
+
+                                    let rect = response.rect;
+
+                                    let scaled_rect = Rect::from_center_size(
+                                        Pos2::new(0.5, 0.5),
+                                        Vec2::new(1., 1.)
+                                            * (this_rect.size() / this_rect.expand(20.).size()),
+                                    );
+
+                                    dbg!(&rect, &this_rect, &scale, &scaled_rect);
+
+                                    self.labeled_rects = vec![SmthLabeled::Rect(LabeledRect {
+                                        rect: scaled_rect,
+                                        label: this_building.class_name.clone(),
+                                    })];
+
+                                    self.draw_rects(ui, ctx, rect);
+                                    if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                        self.reset_labeling(false, true, builds);
+                                    } else if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+                                        self.reset_labeling(true, true, builds);
+                                    }
+                                }
                             }
+                        } else {
+                            self.get_building_thread
+                                .set_field("model_name", model.clone());
+                            self.get_building_thread
+                                .set_field("path_to_image", selected.clone());
+                            self.get_building_thread
+                                .set_field("should_get_prediction", true);
+                            self.update_buildings();
                         }
                     }
                 }
