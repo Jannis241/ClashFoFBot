@@ -1601,7 +1601,16 @@ impl ScreenshotApp {
             self.show_selectable_models(ui);
             if let Some(sm) = self.selected_model {
                 if ui.button("Generate TestVals").clicked() {
-                    image_data_wrapper::get_testvals(sm);
+                    self.create_error("Gereating TestVals...", MessageType::Success);
+                    let res = image_data_wrapper::get_testvals(sm);
+                    if let Ok(_) = res {
+                        self.create_error("Gereated TestVals", MessageType::Success);
+                    } else if let Err(fe) = res {
+                        self.create_error(
+                            format!("failed getting testvals: {:?}", fe),
+                            MessageType::Error,
+                        );
+                    }
                 }
             }
         });
