@@ -336,6 +336,7 @@ pub struct ScreenshotApp {
     current_avg_conf: Option<f32>,
     current_epochen: String,
     rauthaus_das_man_gerade_labeled: LabelRathaus,
+    ja_nein_idx: usize,
 }
 
 // fn patch_and_save_image_no_overlap(
@@ -588,6 +589,7 @@ impl Default for ScreenshotApp {
             in_test_mode: false,
             current_epochen: "".to_string(),
             rauthaus_das_man_gerade_labeled: LabelRathaus::Gemischt,
+            ja_nein_idx: 0,
         };
 
         s.reload_models();
@@ -1086,8 +1088,14 @@ impl ScreenshotApp {
                 let size = [img.width() as usize, img.height() as usize];
                 let color_img = egui::ColorImage::from_rgba_unmultiplied(size, &img.into_raw());
                 let color_img = color_img.region_by_pixels(
-                    [sub_part.left() as usize, sub_part.top() as usize],
-                    [sub_part.width() as usize, sub_part.height() as usize],
+                    [
+                        (sub_part.left() * size[0] as f32) as usize,
+                        (sub_part.top() * size[1] as f32) as usize,
+                    ],
+                    [
+                        (sub_part.width() * size[0] as f32) as usize,
+                        (sub_part.height() * size[1] as f32) as usize,
+                    ],
                 );
                 self.image_texture =
                     Some(ctx.load_texture("selected_image", color_img, Default::default()));
@@ -2443,6 +2451,32 @@ impl ScreenshotApp {
                     ui.label("Kein Bild ausgewählt.");
                 }
             } else if is_running && labeling_mode == LabelingMode::JaNein {
+                self.show_selectable_models(ui);
+
+                if let Some(selected) = self.labeling_que.clone().last() {
+                    if let Some(model) = &self.selected_model {
+                        self.update_buildings();
+                        if let Some(builds) = &self.current_buildings {
+                            if let Some(this_building) = builds.get(self.ja_nein_idx) {
+                                self.update_image_texture_sub_img(
+                                    ctx,
+                                    selected.to_string(),
+                                    Rect::from_two_pos(
+                                        Pos2::new(
+                                            this_building.bounding_box.0,
+                                            this_building.bounding_box.1,
+                                        ),
+                                        Pos2::new(
+                                            this_building.bounding_box.2,
+                                            this_building.bounding_box.3,
+                                        ),
+                                    )
+                                    .expand(0.01),
+                                );
+                            }
+                        }
+                    }
+                }
             }
         }
     }
