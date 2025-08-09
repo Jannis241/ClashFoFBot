@@ -21,5 +21,9 @@ for model_dir in runs/detect/*/; do
     fi
 done
 
+# Lösche den gesamten runs-Ordner
+echo "Lösche kompletten runs-Ordner..."
+rm -rf runs
+
 echo "Bereinigung abgeschlossen ✅"
 
