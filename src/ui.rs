@@ -6,6 +6,10 @@ use eframe::egui::{
 };
 use egui::{vec2, Rect};
 
+const GREEN: egui::Color32 = egui::Color32::from_rgb(0, 200, 100);
+const YELLOW: egui::Color32 = egui::Color32::from_rgb(255, 180, 0);
+const RED: egui::Color32 = egui::Color32::from_rgb(200, 50, 50);
+
 pub fn start_ui() {
     let options = eframe::NativeOptions::default();
     let _ = eframe::run_native(
@@ -858,7 +862,7 @@ impl ScreenshotApp {
                 StrokeKind::Middle,
             );
 
-            painter.galley(pos + padding, galley, Color32::RED);
+            painter.galley(pos + padding, galley, RED);
 
             total_height += size.y + spacing;
         }
@@ -1002,9 +1006,9 @@ impl ScreenshotApp {
                     // Decide button style & label
                     let is_choosing = matches!(self.keybinds.get(&func), Some(Keybind::Choosing));
                     let (color, label) = if is_choosing {
-                        (Color32::YELLOW, "Taste drücken")
+                        (YELLOW, "Taste drücken")
                     } else {
-                        (Color32::DARK_GREEN, "Keybind ändern")
+                        (GREEN, "Keybind ändern")
                     };
 
                     let button = egui::Button::new(label).fill(color);
@@ -1094,9 +1098,9 @@ impl ScreenshotApp {
                     let color = if is_selected {
                         egui::Color32::from_rgb(100, 150, 255) // blau
                     } else if in_dataset {
-                        egui::Color32::from_rgb(0, 200, 100) // grün
+                        GREEN
                     } else {
-                        egui::Color32::from_rgb(200, 50, 50) // rot
+                        RED
                     };
 
                     let label = RichText::new(filename.clone()).color(color);
@@ -1190,7 +1194,7 @@ impl ScreenshotApp {
 
             let bounding_rect = egui::Rect::from_min_max(top_left, bottom_right);
 
-            let color = Color32::RED;
+            let color = RED;
 
             ui.painter().rect_stroke(
                 bounding_rect,
@@ -1210,7 +1214,7 @@ impl ScreenshotApp {
                 egui::Align2::LEFT_TOP,
                 label_text,
                 egui::TextStyle::Body.resolve(ui.style()),
-                Color32::BLUE,
+                RED,
             );
         }
     }
@@ -1336,7 +1340,7 @@ impl ScreenshotApp {
                                 RichText::new("Model Hinzufügen").color(Color32::WHITE);
 
                             let button = egui::Button::new(button_text)
-                                .fill(Color32::from_rgb(0, 180, 0)) // grün
+                                .fill(GREEN) // grün
                                 .stroke(egui::Stroke::new(1.0, Color32::DARK_GREEN)); // optionaler Rand
 
                             if ui.add(button).clicked() {
@@ -1365,7 +1369,7 @@ impl ScreenshotApp {
 
                 if let Some(name) = &self.selected_model {
                     if ui
-                        .add(egui::Button::new("Modell löschen").fill(egui::Color32::RED))
+                        .add(egui::Button::new("Modell löschen").fill(RED))
                         .clicked()
                     {
                         println!("Modell gelöscht: {name}");
@@ -1587,7 +1591,7 @@ impl ScreenshotApp {
                             .selectable_label(
                                 self.selected_model == m,
                                 RichText::new(label).color(if is_training {
-                                    Color32::YELLOW
+                                    YELLOW
                                 } else {
                                     Color32::GRAY
                                 }),
@@ -1616,7 +1620,7 @@ impl ScreenshotApp {
                         if ui
                             .add(
                                 egui::Button::new(RichText::new(text).color(Color32::WHITE))
-                                    .fill(Color32::from_rgb(200, 50, 50)),
+                                    .fill(RED),
                             )
                             .clicked()
                         {
@@ -1644,8 +1648,7 @@ impl ScreenshotApp {
             let text = "Start Training";
             if ui
                 .add(
-                    egui::Button::new(RichText::new(text).color(Color32::WHITE))
-                        .fill(Color32::from_rgb(0, 180, 80)), // Grün
+                    egui::Button::new(RichText::new(text).color(Color32::WHITE)).fill(GREEN), // Grün
                 )
                 .clicked()
             {
@@ -2269,14 +2272,14 @@ impl ScreenshotApp {
                 (lr.rect.right_bottom().to_vec2() * img_rect.size()).to_pos2()
                     + img_rect.left_top().to_vec2(),
             );
-            painter.rect_stroke(new_rect, 0.0, (2.0, egui::Color32::RED), StrokeKind::Middle);
+            painter.rect_stroke(new_rect, 0.0, (2.0, RED), StrokeKind::Middle);
             if idx + 1 == all_labeled_rects.len() {
                 painter.text(
                     lr.rect.left_top() * img_rect.width() + img_rect.left_top().to_vec2(),
                     egui::Align2::LEFT_TOP,
                     &lr.label,
                     egui::TextStyle::Body.resolve(&ctx.style()),
-                    egui::Color32::RED,
+                    RED,
                 );
             }
         }
@@ -2286,7 +2289,7 @@ impl ScreenshotApp {
                 (start.to_vec2() * img_rect.size()).to_pos2() + img_rect.left_top().to_vec2(),
                 (current.to_vec2() * img_rect.size()).to_pos2() + img_rect.left_top().to_vec2(),
             );
-            painter.rect_stroke(rect, 0.0, (1.0, egui::Color32::GREEN), StrokeKind::Middle);
+            painter.rect_stroke(rect, 0.0, (1.0, GREEN), StrokeKind::Middle);
         }
 
         if let (Some(start), Some(current)) = (self.current_line_start, self.current_line_end) {
@@ -2295,7 +2298,7 @@ impl ScreenshotApp {
                     (start.to_vec2() * img_rect.size()).to_pos2() + img_rect.left_top().to_vec2(),
                     (current.to_vec2() * img_rect.size()).to_pos2() + img_rect.left_top().to_vec2(),
                 ],
-                (1.0, egui::Color32::GREEN),
+                (1.0, GREEN),
             );
         }
     }
@@ -2318,9 +2321,9 @@ impl ScreenshotApp {
                     let color = if is_selected {
                         egui::Color32::from_rgb(100, 150, 255) // blau
                     } else if in_dataset {
-                        egui::Color32::from_rgb(0, 200, 100) // grün
+                        GREEN
                     } else {
-                        egui::Color32::from_rgb(200, 50, 50) // rot
+                        RED
                     };
 
                     let label = RichText::new(&filename).color(color);
@@ -2359,7 +2362,7 @@ impl ScreenshotApp {
                         self.current_buildings.clone().unwrap_or(vec![]).len()
                     )
                 },
-                Color32::from_rgb(200, 50, 50),
+                RED,
             ) // rot
         } else {
             (
@@ -2367,7 +2370,7 @@ impl ScreenshotApp {
                     "Start Session ({} ausgewählte Bilder)",
                     self.selected_images.len()
                 ),
-                Color32::from_rgb(0, 200, 100),
+                GREEN,
             ) // grün
         };
 
@@ -2559,7 +2562,7 @@ impl ScreenshotApp {
                     if let Ok(image_data_wrapper::DatasetType::Level) =
                         image_data_wrapper::get_dataset_type(&model)
                     {
-                        ui.colored_label(Color32::YELLOW, "ACHTUNG!! das ausgewhählte model ist Ein Level Model, was nicht gut mit der JaNein Funktion funktioniert.");
+                        ui.colored_label(YELLOW, "ACHTUNG!! das ausgewhählte model ist Ein Level Model, was nicht gut mit der JaNein Funktion funktioniert.");
                     }
                     self.session_button(ui);
                 }
