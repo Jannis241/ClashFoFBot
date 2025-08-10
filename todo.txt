@@ -1,10 +1,12 @@
-- model übersicht machen
-- das rating nach ende des trainings updaten
-- training stoppen funktion (gucken ob das mit dem winter arc funtioniert)
-- verstecke mauern simulieren und anzeigen
-- mauern linien im ui anzeigen
-- builings und mauern label zu einem kombinieren und im ui anzeigen.
-- filter (normal, defences, wall)
-- später: keybind settings speichern (auch wenn man es schließt)
 
-- eigene model test funktion machen das rating angezeigt wird und auf test images die prediction geholt wird mit anzegen was er richtig udn falsch hat etc
+jesko:
+- labeln verbessern mit dass der letzte name immer wieder kommt bis man was anderes eingibt
+- model testen (prediciton) schöner machen + confidence slider, mit filter, option zu mauern linien, versteckte mauen simulieren usw etc.
+- builings und level label zu einem kombinieren und bei model testen anzeigen. (bei model testen soll man das auswählen können welche modelle kombiniert werden sollen oder ob nur ein einzelnes modell gezeigt werden soll )
+- ja nein funktion so machen dass immer ein split des images predicted wird (oder man die splits selber auswählen kann) und man dann sagen kann ob alles richitg ist oder nicht
+- bei ja nein auch die option biede models zusammen zu korrigieren (buildings und level model kombinieren)
+-(model übersicht machen)
+
+
+jannis:
+- linien verbinden
