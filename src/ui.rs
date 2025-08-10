@@ -169,7 +169,6 @@ enum Function {
     SubtractDivision,
     SaveImg,
     SkipImg,
-    RepeatLastLabel,
 }
 
 #[derive(Clone, Debug)]
@@ -545,8 +544,6 @@ impl Default for ScreenshotApp {
         s.keybinds.insert(Function::SaveImg, Keybind::Done(Enter));
         s.keybinds
             .insert(Function::SkipImg, Keybind::Done(ArrowRight));
-        s.keybinds
-            .insert(Function::RepeatLastLabel, Keybind::Done(ArrowUp));
         s.keybinds
             .insert(Function::AutoComplete, Keybind::Done(Space));
         s.keybinds
@@ -935,7 +932,6 @@ impl ScreenshotApp {
                 Function::SubtractDivision,
                 Function::SaveImg,
                 Function::SkipImg,
-                Function::RepeatLastLabel,
             ] {
                 ui.horizontal(|ui| {
                     // Function name
@@ -1694,7 +1690,15 @@ impl ScreenshotApp {
                 dbg!(&rect);
                 self.labeled_rects.push(SmthLabeled::Rect(LabeledRect {
                     rect,
-                    label: String::new(),
+                    label: if let Some(last) = self.labeled_rects.last() {
+                        let ll = last.get_label();
+                        let filter = regex::Regex::new(r"\D+").unwrap();
+
+                        let extracted = filter.find(&ll).map(|m| m.as_str().to_string());
+                        extracted.unwrap_or(ll)
+                    } else {
+                        String::new()
+                    },
                 }));
 
                 self.current_rect_end = None;
@@ -1816,6 +1820,17 @@ impl ScreenshotApp {
                                     .collect::<Vec<String>>()
                                     .contains(text)
                             {
+                                if let Some(last) = sllabel.clone() {
+                                    if r.get_label() == last {
+                                        r.set_label("".to_string());
+                                    }
+                                }
+                                r.push_str_to_label(text.to_lowercase().as_str());
+                            } else if ('0'..='9')
+                                .map(|c| c.to_string())
+                                .collect::<Vec<String>>()
+                                .contains(text)
+                            {
                                 r.push_str_to_label(text.to_lowercase().as_str());
                             }
                         }
@@ -1841,15 +1856,6 @@ impl ScreenshotApp {
                                             if li.divisions > 0 {
                                                 li.divisions -= 1;
                                             }
-                                        }
-                                    }
-                                }
-                            }
-                            if let Some(keybind) = self.keybinds.get(&Function::RepeatLastLabel) {
-                                if let Keybind::Done(keybind) = keybind {
-                                    if keybind == key {
-                                        if let Some(ref last) = sllabel {
-                                            r.set_label(last.to_string());
                                         }
                                     }
                                 }
