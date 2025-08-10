@@ -55,13 +55,13 @@ def train_model(model_name, data_set_type, epochen):
     epochs=epochen,
     imgsz=960,                 # Reicht meistens, 1280 wäre overkill
     batch=1,                   # je nach VRAM
-        accumulate=8, #nur für die ubutuntu user
+        # accumulate=8, #nur für die ubutuntu user
     optimizer="AdamW",
     lr0=0.001,
     lrf=0.01,
     weight_decay=0.0005,
-    patience=100, #erstmal soll er undendlich lang trainieren
-    warmup_epochs=100,
+    patience=round(epochen*0.3), #erstmal soll er undendlich lang trainieren
+    warmup_epochs=round(epochen*0.05),
     pretrained=True,
     #  device=0, # geht nicht auf mac
 
