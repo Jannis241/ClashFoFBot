@@ -54,8 +54,10 @@ def train_model(model_name, data_set_type, epochen):
     data=DATA_YAML,
     epochs=epochen,
     imgsz=960,                 # Reicht meistens, 1280 wäre overkill
-    batch=1,                   # je nach VRAM
-        # accumulate=8, #nur für die ubutuntu user
+    batch=8,                   # je nach VRAM
+         accumulate=8, #nur für die ubutuntu user
+        workers=1,
+
     optimizer="AdamW",
     lr0=0.001,
     lrf=0.01,
@@ -63,7 +65,8 @@ def train_model(model_name, data_set_type, epochen):
     patience=round(epochen*0.3), #erstmal soll er undendlich lang trainieren
     warmup_epochs=round(epochen*0.05),
     pretrained=True,
-    #  device=0, # geht nicht auf mac
+        amp=True,
+      device=0, # geht nicht auf mac
 
     # Augmentation (angepasst!):
     hsv_h=0.0,                 # Keine Farbanpassung!

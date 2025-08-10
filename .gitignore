@@ -33,12 +33,13 @@ target
 # /dataset
 # /images
 # /todo.txt
-# /Communication
+#  /Communication
 
-/dataset_buildings/labels/val.cache
-/dataset_buildings/labels/train.cache
-/dataset_level/labels/val.cache
-/dataset_level/labels/train.cache
+dataset_buildings/labels/train.cache
+          dataset_buildings/labels/val.cache
+         dataset_level/labels/train.cache
+         dataset_level/labels/val.cache
+
 
 .DS_Store
 Thumbs.db
