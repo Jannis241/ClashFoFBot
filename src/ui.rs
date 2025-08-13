@@ -1,8 +1,8 @@
 use crate::{prelude::*, threading::WorkerHandle};
 use eframe::egui::{
-    vec2,
+    vec2, Id,
     Key::{self, *},
-    Pos2, Vec2,
+    Pos2, Slider, Vec2,
 };
 use egui::Rect;
 
@@ -251,7 +251,36 @@ impl TrainThread {
     }
 }
 
+// new enum
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum LabelMode {
+    ClassName,
+    ClassId,
+    None,
+}
+
 pub struct ScreenshotApp {
+    // fields to add to your App struct
+    pub min_confidence: f32, // default: 0.25
+
+    // filters & toggles
+    pub show_walls: bool,                // default true
+    pub show_normal_buildings: bool,     // default true
+    pub show_defences: bool,             // default true
+    pub connect_walls_enabled: bool,     // default false
+    pub min_dist_to_connect: f32,        // default 32.0
+    pub find_hidden_walls_enabled: bool, // default false
+    pub combine_models_enabled: bool,    // no-op for now
+    pub show_img: bool,
+
+    // labels / UI state
+    pub label_mode: LabelMode, // default: LabelMode::ClassName
+
+    // image & building data
+    pub image_texture: Option<egui::TextureHandle>,
+    pub raw_buildings: Vec<image_data_wrapper::Building>, // source detections (pixel coords)
+    pub wall_connections: Vec<((f32, f32), (f32, f32))>, // updated each frame when connect_walls_enabled
+
     current_sub_img: Option<image::RgbaImage>,
     current_labeling_mode: Option<LabelingMode>,
     screenshot_path: String,
@@ -270,7 +299,6 @@ pub struct ScreenshotApp {
     get_building_thread: threading::WorkerHandle<GetBuildingsThread>,
     current_buildings: Option<Vec<image_data_wrapper::Building>>,
     active_tab: Tab,
-    image_texture: Option<egui::TextureHandle>,
     labeled_rects: Vec<SmthLabeled>,
     current_rect_start: Option<egui::Pos2>,
     current_rect_end: Option<egui::Pos2>,
@@ -496,8 +524,25 @@ impl SmthLabeled {
 impl Default for ScreenshotApp {
     fn default() -> Self {
         let mut s = Self {
-            current_labeling_mode: None,
+            min_confidence: 0.25,
+
+            show_walls: true,
+            show_normal_buildings: true,
+            show_defences: true,
+            connect_walls_enabled: false,
+            min_dist_to_connect: 32.0,
+            find_hidden_walls_enabled: false,
+            combine_models_enabled: false,
+            show_img: true,
+
+            label_mode: LabelMode::ClassName,
+
+            image_texture: None,
+            raw_buildings: Vec::new(),
+            wall_connections: Vec::new(),
             current_avg_conf: None,
+
+            current_labeling_mode: None,
             current_buildings: None,
             split_count: 1,
             preview_texture: None,
@@ -524,7 +569,6 @@ impl Default for ScreenshotApp {
                 true,
             ),
             active_tab: Tab::Settings,
-            image_texture: None,
             labeled_rects: vec![],
             current_rect_start: None,
             current_rect_end: None,
@@ -614,7 +658,7 @@ impl ScreenshotApp {
             }
 
             if let Some(texture) = &self.preview_texture {
-                let (img, scale) = self.get_scaled_texture(ui, texture);
+                let (img, scale) = self.get_scaled_texture(ctx, ui, true, texture);
                 let img_size = img.size().unwrap() * scale;
                 let response = ui.add(img);
 
@@ -1104,21 +1148,39 @@ impl ScreenshotApp {
 
     fn get_scaled_texture(
         &self,
+        ctx: &egui::Context,
         ui: &mut egui::Ui,
+        use_ui: bool,
         texture: &egui::TextureHandle,
     ) -> (egui::Image, f32) {
-        let available_size = ui.available_size();
-        let tex_size = egui::vec2(texture.size()[0] as f32, texture.size()[1] as f32);
+        if !use_ui {
+            let available_size = ctx.available_rect();
+            let tex_size = egui::vec2(texture.size()[0] as f32, texture.size()[1] as f32);
 
-        // Seitenverhältnis beibehalten
-        let scale = (available_size.x / tex_size.x).min(available_size.y / tex_size.y);
-        let final_size = tex_size * scale;
+            // Seitenverhältnis beibehalten
+            let scale =
+                (available_size.width() / tex_size.x).min(available_size.height() / tex_size.y);
+            let final_size = available_size.size();
 
-        // Bild anzeigen
-        (
-            egui::Image::new(texture).fit_to_exact_size(final_size),
-            scale,
-        )
+            // Bild anzeigen
+            (
+                egui::Image::new(texture).fit_to_exact_size(final_size),
+                scale,
+            )
+        } else {
+            let available_size = ui.available_size();
+            let tex_size = egui::vec2(texture.size()[0] as f32, texture.size()[1] as f32);
+
+            // Seitenverhältnis beibehalten
+            let scale = (available_size.x / tex_size.x).min(available_size.y / tex_size.y);
+            let final_size = available_size;
+
+            // Bild anzeigen
+            (
+                egui::Image::new(texture).fit_to_exact_size(final_size),
+                scale,
+            )
+        }
     }
 
     fn draw_buildings(
@@ -1333,12 +1395,7 @@ impl ScreenshotApp {
         });
     }
 
-    fn update_buildings(
-        &mut self,
-        show_normal_buildings: bool,
-        show_walls: bool,
-        show_defences: bool,
-    ) {
+    fn update_buildings(&mut self) {
         if self.current_buildings.is_some() {
             return;
         }
@@ -1367,15 +1424,43 @@ impl ScreenshotApp {
                 );
             }
         } else if let Ok(bldngs) = buildings {
-            let bldngs = filter_buildings::apply_filter(
-                &bldngs,
-                show_normal_buildings,
-                show_walls,
-                show_defences,
-            );
             self.current_buildings = Some(bldngs.clone());
             self.current_avg_conf = Some(image_data_wrapper::get_avg_confidence(&bldngs));
             self.create_error("Buildings Bekommen", MessageType::Success);
+        }
+    }
+
+    pub fn recompute_buildings(&mut self) -> Vec<image_data_wrapper::Building> {
+        if let Some(bldngs) = &self.current_buildings {
+            // Start from raw detections
+            // 1) apply category filter (external)
+            let mut filtered = crate::filter_buildings::apply_filter(
+                &bldngs,
+                self.show_normal_buildings,
+                self.show_walls,
+                self.show_defences,
+            );
+
+            // 2) apply confidence threshold
+            filtered.retain(|b| b.confidence >= self.min_confidence);
+
+            // 3) optionally find hidden walls (append results)
+            if self.find_hidden_walls_enabled {
+                // call external function; it returns newly found wall Building instances (in pixel coords)
+                let hidden = crate::walls::find_hidden_walls(&filtered);
+                // append (you may want dedup logic; naive append for now)
+                filtered.extend(hidden.into_iter());
+            }
+
+            // 4) If connect_walls is enabled we don't mutate here — we just return the filtered set.
+            //    wall connections (line segments) will be computed by the caller (frame code) and stored
+            //    into self.wall_connections so draw_buildings can render them.
+            //
+            // Return filtered vector (pixel coords).
+            filtered
+        } else {
+            self.update_buildings();
+            vec![]
         }
     }
 
@@ -1424,26 +1509,72 @@ impl ScreenshotApp {
             egui::Window::new("Model Test")
                 .open(&mut modeclone)
                 .show(ctx, |ui: &mut egui::Ui| {
-                    if let Some(selected) = &self.selected_image {
-                        self.update_image_texture(ctx, selected.to_string());
+                    ui.horizontal(|ui| {
+                        if let Some(selected) = &self.selected_image {
+                            self.update_image_texture(ctx, selected.to_string());
 
-                        if let Some(texture) = &self.image_texture {
-                            let (img, scale) = self.get_scaled_texture(ui, texture);
-                            let response = ui.add(img);
+                            // inside your UI code where you already have `texture` and call `ui.add(img_widget)`:
+                            if let Some(texture) = &self.image_texture {
+                                // Create an egui Image widget sized to the same available rectangle
+                                // Use your get_scaled_texture or create a fixed-size image widget:
+                                // Suppose `img_widget` is created using the same available size as you used before:
+                                // let image_size_ui = ui.available_size(); // the placeholder size in UI the image will occupy
+                                // if you have a specific aspect handling, adapt image_size_ui as needed.
 
-                            let rect = response.rect;
+                                // Add the image to get a response (so we can use drag/hover)
+                                let (img, scale) = self.get_scaled_texture(ctx, ui, false, texture);
 
-                            self.update_buildings(true, true, true);
+                                let size = vec2(texture.size()[0] as f32, texture.size()[1] as f32)
+                                    * scale;
 
-                            if let Some(buildings) = self.current_buildings.clone() {
-                                if let Some(avg) = self.current_avg_conf {
-                                    ui.label(format!("Durchschnittliche Confidence: {}", avg));
+                                dbg!(&size);
+
+                                let (rect, resp_alloc) =
+                                    ui.allocate_exact_size(size, egui::Sense::drag());
+
+                                let response = if self.show_img {
+                                    ui.put(rect, img)
+                                } else {
+                                    // image hidden: draw a plain black rectangle (or border + text) and reuse the allocated Response
+                                    ui.painter().rect_filled(rect, 0.0, Color32::BLACK);
+                                    resp_alloc
+                                };
+
+                                let rect = response.rect;
+
+                                // Determine original image size in pixels
+                                let size = texture.size();
+                                let (img_w, img_h) = (size[0], size[1]);
+
+                                // Now call recompute_buildings every frame
+                                let buildings_to_draw = self.recompute_buildings();
+
+                                // Update wall connections each frame if enabled (we mutate self here)
+                                if self.connect_walls_enabled {
+                                    // connect_walls returns (Vec<Building>, Vec<((f32,f32),(f32,f32))>)
+                                    let (_connected_buildings, connections) =
+                                        crate::walls::connect_walls(
+                                            &buildings_to_draw,
+                                            self.min_dist_to_connect,
+                                        );
+                                    self.wall_connections = connections;
+                                } else {
+                                    self.wall_connections.clear();
                                 }
 
-                                self.draw_buildings(ui, buildings, rect, scale);
+                                // Finally draw overlays
+                                self.draw_buildings_overlaid(
+                                    &ui.painter_at(rect), // painter clipped to the image rect
+                                    &buildings_to_draw,
+                                    (img_w as f32, img_h as f32),
+                                    rect,
+                                );
+
+                                // Draw the avg_conf marker on your confidence slider elsewhere (see below)
+                                self.show_settings_in_window(ui);
                             }
                         }
-                    }
+                    });
                 });
 
             self.in_test_mode = modeclone;
@@ -1453,11 +1584,172 @@ impl ScreenshotApp {
 
                 if let Some(texture) = &self.image_texture {
                     ui.label("Vorschau: ");
-                    let (img, scale) = self.get_scaled_texture(ui, texture);
+                    let (img, scale) = self.get_scaled_texture(ctx, ui, true, texture);
                     let response = ui.add(img);
                 }
             }
         });
+    }
+
+    pub fn show_settings_in_window(&mut self, ui: &mut egui::Ui) {
+        use egui::{Align, Color32, Label, Pos2, Rect, Sense, Stroke};
+
+        // Tight vertical spacing so it doesn't feel cluttered
+        // ui.set_max_width(240.0);
+        ui.vertical(|ui| {
+            // Title row
+            ui.heading("Settings");
+
+            ui.separator();
+
+            // --- Main horizontal split: left = checkboxes & label mode, right = vertical sliders ---
+            // LEFT: compact column for checkboxes and label-mode
+            ui.vertical(|ui| {
+                ui.label("Filters");
+                ui.checkbox(&mut self.show_normal_buildings, "Normal");
+                ui.checkbox(&mut self.show_walls, "Walls");
+                ui.checkbox(&mut self.show_defences, "Defences");
+
+                ui.separator();
+
+                ui.checkbox(&mut self.find_hidden_walls_enabled, "Find hidden walls");
+                ui.checkbox(&mut self.connect_walls_enabled, "Connect walls");
+                if self.connect_walls_enabled {
+                    ui.add_sized(
+                        vec2(300., 50.),
+                        egui::Slider::new(&mut self.min_dist_to_connect, 1.0..=100.0)
+                            .step_by(0.5)
+                            .text("min dist px"),
+                    );
+                }
+
+                ui.separator();
+
+                ui.checkbox(&mut self.combine_models_enabled, "Combine models (no-op)");
+                ui.separator();
+
+                ui.checkbox(&mut self.show_img, "Show Image");
+
+                ui.separator();
+
+                ui.label("Label mode");
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.label_mode, LabelMode::ClassName, "Name");
+                    ui.selectable_value(&mut self.label_mode, LabelMode::ClassId, "ID");
+                    ui.selectable_value(&mut self.label_mode, LabelMode::None, "None");
+                });
+
+                ui.separator();
+                ui.add_sized(
+                    vec2(300., 50.),
+                    Slider::new(&mut self.min_confidence, 0.001..=1.0)
+                        .step_by(0.01)
+                        .text("Min Conf:"),
+                );
+            });
+        });
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_buildings_overlaid(
+        &self,
+        painter: &egui::Painter,
+        buildings: &Vec<image_data_wrapper::Building>, // pixel coord boxes
+        image_px_size: (f32, f32),                     // (img_w, img_h) in pixels as f32
+        image_rect: egui::Rect, // area in UI where image is shown (for clipping / legends)
+    ) {
+        // style
+        let line_width = 2.0;
+        let font_size = 12.0;
+
+        let scale_x = image_rect.width() / image_px_size.0;
+        let scale_y = image_rect.height() / image_px_size.1;
+
+        dbg!(scale_x, scale_y);
+
+        let image_to_ui = |px_x, px_y| {
+            Pos2::new(
+                scale_x * px_x + image_rect.left(),
+                scale_y * px_y + image_rect.top(),
+            )
+        };
+
+        // draw boxes
+        for b in buildings {
+            let (bx1, by1, bx2, by2) = b.bounding_box;
+
+            // clamp coords to image bounds (optional)
+            let x1 = bx1.clamp(0.0, image_px_size.0);
+            let y1 = by1.clamp(0.0, image_px_size.1);
+            let x2 = bx2.clamp(0.0, image_px_size.0);
+            let y2 = by2.clamp(0.0, image_px_size.1);
+
+            let p1 = image_to_ui(x1, y1);
+            let p2 = image_to_ui(x2, y2);
+
+            let rect = egui::Rect::from_two_pos(p1, p2);
+
+            let (is_wall, is_defence, is_normal) = filter_buildings::get_building_type(b);
+
+            if is_wall && self.connect_walls_enabled {
+                continue;
+            }
+
+            // color choice
+            let color = if is_wall {
+                egui::Color32::from_rgb(200, 120, 40)
+            } else if is_defence {
+                egui::Color32::from_rgb(220, 40, 40)
+            } else if is_normal {
+                egui::Color32::from_rgb(40, 140, 220)
+            } else {
+                unreachable!()
+            };
+
+            painter.rect_stroke(
+                rect,
+                0.0,
+                egui::Stroke::new(line_width, color),
+                StrokeKind::Middle,
+            );
+
+            // label text position: try above box, clamp to image_rect
+            if self.label_mode != LabelMode::None {
+                let label_text = match self.label_mode {
+                    LabelMode::ClassName => format!("{} ({:.2})", b.class_name, b.confidence),
+                    LabelMode::ClassId => format!("{} ({:.2})", b.class_id, b.confidence),
+                    LabelMode::None => String::new(),
+                };
+                if !label_text.is_empty() {
+                    // prefer top-left above box. If that would be outside the image_rect, clamp inside.
+                    let mut text_pos =
+                        egui::pos2(rect.left() + 2.0, rect.top() - (font_size + 4.0));
+                    // clamp left/right to image_rect
+                    text_pos.x = text_pos
+                        .x
+                        .max(image_rect.left() + 2.0)
+                        .min(image_rect.right() - 50.0);
+                    text_pos.y = text_pos.y.max(image_rect.top() + 2.0);
+                    painter.text(
+                        text_pos,
+                        egui::Align2::LEFT_TOP,
+                        label_text,
+                        egui::FontId::proportional(font_size),
+                        egui::Color32::WHITE,
+                    );
+                }
+            }
+        }
+
+        // draw wall connections (expected in pixel coords)
+        for ((sx, sy), (ex, ey)) in &self.wall_connections {
+            let s = image_to_ui(*sx, *sy);
+            let e = image_to_ui(*ex, *ey);
+            painter.line_segment(
+                [s, e],
+                egui::Stroke::new((2.0f32).max(1.0), egui::Color32::LIGHT_GREEN),
+            );
+        }
     }
 
     fn model_training(&mut self, ui: &mut egui::Ui) {
@@ -2547,7 +2839,7 @@ impl ScreenshotApp {
                     self.update_image_texture(ctx, selected.to_string());
 
                     if let Some(texture) = &self.image_texture {
-                        let (img, scale) = self.get_scaled_texture(ui, texture);
+                        let (img, scale) = self.get_scaled_texture(ctx, ui, true, texture);
                         let response = ui.add(img);
 
                         // Das gezeichnete Rechteck
@@ -2582,64 +2874,7 @@ impl ScreenshotApp {
                     if let Some(model) = &self.selected_model {
                         if let Some(builds) = self.current_buildings.clone() {
                             if let Some(this_building) = builds.get(self.ja_nein_idx) {
-                                let this_rect = Rect::from_two_pos(
-                                    Pos2::new(
-                                        this_building.bounding_box.0,
-                                        this_building.bounding_box.1,
-                                    ),
-                                    Pos2::new(
-                                        this_building.bounding_box.2,
-                                        this_building.bounding_box.3,
-                                    ),
-                                );
-
-                                self.update_image_texture_sub_img(
-                                    ctx,
-                                    selected.to_string(),
-                                    this_rect.expand(5.),
-                                );
-                                if let Some(texture) = &self.image_texture {
-                                    let (img, scale) = self.get_scaled_texture(ui, texture);
-                                    let response = ui.add(img);
-
-                                    // Das gezeichnete Rechteck
-
-                                    let rect = response.rect;
-
-                                    let scaled_rect = Rect::from_center_size(
-                                        Pos2::new(0.5, 0.5),
-                                        Vec2::new(1., 1.)
-                                            * (this_rect.size() / this_rect.expand(5.).size()),
-                                    );
-
-                                    dbg!(&rect, &this_rect, &scale, &scaled_rect);
-
-                                    self.labeled_rects = vec![SmthLabeled::Rect(LabeledRect {
-                                        rect: scaled_rect,
-                                        label: this_building.class_name.clone(),
-                                    })];
-
-                                    self.draw_rects(ui, ctx, rect);
-                                    if let Some(keybind) = self.keybinds.get(&Function::SaveImg) {
-                                        if let Keybind::Done(keybind) = keybind {
-                                            if ctx.input(|i| i.key_pressed(*keybind)) {
-                                                self.reset_labeling(false, true, builds.clone());
-                                            }
-                                        }
-                                    }
-
-                                    if let Some(keybind) = self.keybinds.get(&Function::SkipImg) {
-                                        if let Keybind::Done(keybind) = keybind {
-                                            if ctx.input(|i| i.key_pressed(*keybind)) {
-                                                self.reset_labeling(true, true, builds);
-                                                self.create_error(
-                                                    "Bild Übersprungen",
-                                                    MessageType::Success,
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
+                                todo!("impl JaNein");
                             }
                         } else {
                             self.get_building_thread
@@ -2648,7 +2883,7 @@ impl ScreenshotApp {
                                 .set_field("path_to_image", selected.clone());
                             self.get_building_thread
                                 .set_field("should_get_prediction", true);
-                            self.update_buildings(true, false, true);
+                            self.update_buildings();
                         }
                     }
                 }

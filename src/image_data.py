@@ -142,7 +142,7 @@ def write_prediction_to_json(model_name, image_path):
     model = YOLO(model_path)
     # model = YOLO("yolov8n")
 
-    results = model.predict(source=image_path)[0]
+    results = model.predict(source=image_path, max_det= 999999999, conf=0.0)[0]
 
    # results.show()
 

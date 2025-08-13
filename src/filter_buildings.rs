@@ -75,12 +75,7 @@ fn bbox_to_key(bbox: (f32, f32, f32, f32)) -> (i32, i32, i32, i32) {
     )
 }
 
-pub fn apply_filter(
-    buildings: &Vec<Building>,
-    show_normal_buildings: bool,
-    show_walls: bool,
-    show_defences: bool,
-) -> Vec<Building> {
+pub fn get_building_type(building: &Building) -> (bool, bool, bool) {
     let defences: Vec<String> = vec![
         "bogenschützenturm".to_string(),
         "minenwerfer".to_string(),
@@ -116,18 +111,36 @@ pub fn apply_filter(
         "fegerOL".to_string(),
         "entwicklungsturmbogenschützenturm".to_string(),
     ];
+    let is_wall = building.class_name == "mauer";
+    let is_defence = defences.contains(&building.class_name);
 
+    if is_wall {
+        (true, false, false)
+    } else if is_defence {
+        (false, true, false)
+    } else if !is_wall && !is_defence {
+        (false, false, true)
+    } else {
+        unreachable!()
+    }
+}
+
+pub fn apply_filter(
+    buildings: &Vec<Building>,
+    show_normal_buildings: bool,
+    show_walls: bool,
+    show_defences: bool,
+) -> Vec<Building> {
     let mut result = Vec::new();
 
     for building in buildings.iter() {
-        let is_wall = building.class_name == "mauer";
-        let is_defence = defences.contains(&building.class_name);
+        let (is_wall, is_defence, is_normal) = get_building_type(building);
 
         if is_wall && show_walls {
             result.push(building.clone());
         } else if is_defence && show_defences {
             result.push(building.clone());
-        } else if !is_wall && !is_defence && show_normal_buildings {
+        } else if is_normal && show_normal_buildings {
             result.push(building.clone());
         }
     }
