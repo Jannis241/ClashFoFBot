@@ -1,7 +1,7 @@
 
 jesko:
 #############################################Fertig########################################################################- labeln verbessern mit dass der letzte name immer wieder kommt bis man was anderes eingibt
-- model testen (prediciton) schöner machen + confidence slider, mit filter, option zu mauern linien, versteckte mauen simulieren usw etc.
+#############################################Fertig########################################################################- model testen (prediciton) schöner machen + confidence slider, mit filter, option zu mauern linien, versteckte mauen simulieren usw etc.
 - builings und level label zu einem kombinieren und bei model testen anzeigen. (bei model testen soll man das auswählen können welche modelle kombiniert werden sollen oder ob nur ein einzelnes modell gezeigt werden soll )
 - ja nein funktion so machen dass immer ein split des images predicted wird (oder man die splits selber auswählen kann) und man dann sagen kann ob alles richitg ist oder nicht
 - bei ja nein auch die option biede models zusammen zu korrigieren (buildings und level model kombinieren)

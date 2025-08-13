@@ -1,4 +1,8 @@
-use crate::{prelude::*, threading::WorkerHandle};
+use crate::{
+    image_data_wrapper::{DatasetType, Model},
+    prelude::*,
+    threading::WorkerHandle,
+};
 use eframe::egui::{
     vec2, Id,
     Key::{self, *},
@@ -264,21 +268,28 @@ pub struct ScreenshotApp {
     pub min_confidence: f32, // default: 0.25
 
     // filters & toggles
-    pub show_walls: bool,                // default true
-    pub show_normal_buildings: bool,     // default true
-    pub show_defences: bool,             // default true
-    pub connect_walls_enabled: bool,     // default false
-    pub min_dist_to_connect: f32,        // default 32.0
+    pub show_walls: bool,            // default true
+    pub show_normal_buildings: bool, // default true
+    pub show_defences: bool,         // default true
+    pub connect_walls_enabled: bool, // default false
+    pub min_dist_to_connect: f32,    // default 32.0
+    pub min_iou: f32,
     pub find_hidden_walls_enabled: bool, // default false
     pub combine_models_enabled: bool,    // no-op for now
     pub show_img: bool,
+
+    selected_build_model: Option<String>,
+    selected_lvls_model: Option<String>,
+    get_building_thread_build: threading::WorkerHandle<GetBuildingsThread>,
+    current_buildings_build: Option<Vec<image_data_wrapper::Building>>,
+    get_building_thread_lvls: threading::WorkerHandle<GetBuildingsThread>,
+    current_buildings_lvls: Option<Vec<image_data_wrapper::Building>>,
 
     // labels / UI state
     pub label_mode: LabelMode, // default: LabelMode::ClassName
 
     // image & building data
     pub image_texture: Option<egui::TextureHandle>,
-    pub raw_buildings: Vec<image_data_wrapper::Building>, // source detections (pixel coords)
     pub wall_connections: Vec<((f32, f32), (f32, f32))>, // updated each frame when connect_walls_enabled
 
     current_sub_img: Option<image::RgbaImage>,
@@ -296,8 +307,6 @@ pub struct ScreenshotApp {
     labeling_que: Vec<String>,
     selected_images: HashSet<String>,
     train_threads: Vec<TrainThread>,
-    get_building_thread: threading::WorkerHandle<GetBuildingsThread>,
-    current_buildings: Option<Vec<image_data_wrapper::Building>>,
     active_tab: Tab,
     labeled_rects: Vec<SmthLabeled>,
     current_rect_start: Option<egui::Pos2>,
@@ -308,7 +317,8 @@ pub struct ScreenshotApp {
     dataset_mode: Option<image_data_wrapper::DatasetType>,
     current_models: Vec<image_data_wrapper::Model>,
     in_test_mode: bool,
-    current_avg_conf: Option<f32>,
+    current_avg_conf_lvls: Option<f32>,
+    current_avg_conf_build: Option<f32>,
     current_epochen: String,
     rauthaus_das_man_gerade_labeled: LabelRathaus,
     ja_nein_idx: usize,
@@ -531,19 +541,42 @@ impl Default for ScreenshotApp {
             show_defences: true,
             connect_walls_enabled: false,
             min_dist_to_connect: 32.0,
+            min_iou: 10.,
             find_hidden_walls_enabled: false,
             combine_models_enabled: false,
             show_img: true,
+            selected_build_model: None,
+            selected_lvls_model: None,
+            current_buildings_build: None,
+            current_buildings_lvls: None,
+            get_building_thread_build: threading::WorkerHandle::start(
+                GetBuildingsThread {
+                    path_to_image: "".to_string(),
+                    buildings: Err(FofError::ThreadNotInitialized),
+                    model_name: "".to_string(),
+                    should_get_prediction: false,
+                },
+                true,
+            ),
 
+            get_building_thread_lvls: threading::WorkerHandle::start(
+                GetBuildingsThread {
+                    path_to_image: "".to_string(),
+                    buildings: Err(FofError::ThreadNotInitialized),
+                    model_name: "".to_string(),
+                    should_get_prediction: false,
+                },
+                true,
+            ),
             label_mode: LabelMode::ClassName,
 
             image_texture: None,
-            raw_buildings: Vec::new(),
             wall_connections: Vec::new(),
-            current_avg_conf: None,
+            current_avg_conf_lvls: None,
+            current_avg_conf_build: None,
 
             current_labeling_mode: None,
-            current_buildings: None,
+
             split_count: 1,
             preview_texture: None,
             screenshot_path: "/home/jesko/programmieren/ClashFoFBot/images".to_string(),
@@ -559,20 +592,13 @@ impl Default for ScreenshotApp {
             labeling_que: vec![],
             selected_images: HashSet::new(),
             train_threads: vec![],
-            get_building_thread: threading::WorkerHandle::start(
-                GetBuildingsThread {
-                    path_to_image: "".to_string(),
-                    buildings: Err(FofError::ThreadNotInitialized),
-                    model_name: "".to_string(),
-                    should_get_prediction: false,
-                },
-                true,
-            ),
+
             active_tab: Tab::Settings,
             labeled_rects: vec![],
             current_rect_start: None,
             current_rect_end: None,
             current_line_end: None,
+
             current_line_start: None,
             new_model_name: "".to_string(),
             dataset_mode: None, // Standardwert
@@ -1396,42 +1422,70 @@ impl ScreenshotApp {
     }
 
     fn update_buildings(&mut self) {
-        if self.current_buildings.is_some() {
-            return;
-        }
+        if self.current_buildings_build.is_none() {
+            let buildings_res = self
+                .get_building_thread_build
+                .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>("buildings");
 
-        let buildings_res = self
-            .get_building_thread
-            .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>("buildings");
-
-        let buildings = if let Some(val) = buildings_res {
-            val
-        } else {
-            self.create_error("Konnte Buildings nicht Laden", MessageType::Error);
-            return;
-        };
-
-        if let Err(e) = buildings.clone() {
-            if e == FofError::ThreadNotInitialized {
-                self.create_error(
-                    "Thread um Buildings zu bekommen ist noch nicht inizialisiert",
-                    MessageType::Warning,
-                );
+            let buildings = if let Some(val) = buildings_res {
+                val
             } else {
-                self.create_error(
-                    format!("Konnte Buildings nicht bekommen: {:?}", e),
-                    MessageType::Error,
-                );
+                self.create_error("Konnte Buildings nicht Laden", MessageType::Error);
+                return;
+            };
+
+            if let Err(e) = buildings.clone() {
+                if e == FofError::ThreadNotInitialized {
+                    self.create_error(
+                        "Thread um Buildings zu bekommen ist noch nicht inizialisiert",
+                        MessageType::Warning,
+                    );
+                } else {
+                    self.create_error(
+                        format!("Konnte Buildings nicht bekommen: {:?}", e),
+                        MessageType::Error,
+                    );
+                }
+            } else if let Ok(bldngs) = buildings {
+                self.current_buildings_build = Some(bldngs.clone());
+                self.current_avg_conf_build = Some(image_data_wrapper::get_avg_confidence(&bldngs));
+                self.create_error("Buildings Bekommen", MessageType::Success);
             }
-        } else if let Ok(bldngs) = buildings {
-            self.current_buildings = Some(bldngs.clone());
-            self.current_avg_conf = Some(image_data_wrapper::get_avg_confidence(&bldngs));
-            self.create_error("Buildings Bekommen", MessageType::Success);
+        }
+        if self.current_buildings_lvls.is_none() {
+            let buildings_res = self
+                .get_building_thread_lvls
+                .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>("buildings");
+
+            let buildings = if let Some(val) = buildings_res {
+                val
+            } else {
+                self.create_error("Konnte Buildings nicht Laden", MessageType::Error);
+                return;
+            };
+
+            if let Err(e) = buildings.clone() {
+                if e == FofError::ThreadNotInitialized {
+                    self.create_error(
+                        "Thread um Buildings zu bekommen ist noch nicht inizialisiert",
+                        MessageType::Warning,
+                    );
+                } else {
+                    self.create_error(
+                        format!("Konnte Buildings nicht bekommen: {:?}", e),
+                        MessageType::Error,
+                    );
+                }
+            } else if let Ok(bldngs) = buildings {
+                self.current_buildings_lvls = Some(bldngs.clone());
+                self.current_avg_conf_lvls = Some(image_data_wrapper::get_avg_confidence(&bldngs));
+                self.create_error("Buildings Bekommen", MessageType::Success);
+            }
         }
     }
 
     pub fn recompute_buildings(&mut self) -> Vec<image_data_wrapper::Building> {
-        if let Some(bldngs) = &self.current_buildings {
+        if let Some(bldngs) = &self.current_buildings_build {
             // Start from raw detections
             // 1) apply category filter (external)
             let mut filtered = crate::filter_buildings::apply_filter(
@@ -1459,7 +1513,6 @@ impl ScreenshotApp {
             // Return filtered vector (pixel coords).
             filtered
         } else {
-            self.update_buildings();
             vec![]
         }
     }
@@ -1470,34 +1523,113 @@ impl ScreenshotApp {
                 self.ordner_wählen(ui, "📂 Speicher Ordner der Test Images wählen");
                 self.show_available_pngs(ui);
                 self.update_image_list();
-                self.show_selectable_models(ui);
+                self.current_models.sort_by(|a, b| {
+                    a.rating
+                        .partial_cmp(&b.rating)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+
+                egui::ComboBox::from_label("Modell auswählen")
+                    .selected_text(
+                        self.selected_model
+                            .clone()
+                            .unwrap_or_else(|| "Kein Modell gewählt".into()),
+                    )
+                    .show_ui(ui, |ui| {
+                        for model in self.current_models.clone() {
+                            let score = model.rating;
+                            let name = model.name;
+
+                            let label = format!(
+                                "{name} ({score:.2}) Typ: {}",
+                                match model.dataset_type {
+                                    image_data_wrapper::DatasetType::Buildings =>
+                                        "🏗️ Building Model",
+                                    image_data_wrapper::DatasetType::Level => "🎯 Level Model",
+                                }
+                            );
+
+                            if ui
+                                .selectable_label(
+                                    self.selected_lvls_model.as_deref() == Some(&name)
+                                        || self.selected_build_model.as_deref() == Some(&name),
+                                    label,
+                                )
+                                .clicked()
+                            {
+                                let dataset_type =
+                                    image_data_wrapper::get_dataset_type(&name).unwrap();
+                                if dataset_type == image_data_wrapper::DatasetType::Buildings {
+                                    self.selected_build_model = Some(name);
+                                } else if dataset_type == image_data_wrapper::DatasetType::Level {
+                                    self.selected_lvls_model = Some(name);
+                                }
+                                self.create_error("Model geändert", MessageType::Success);
+                            }
+                        }
+                    });
             });
 
             if !self.in_test_mode {
                 if let Some(img) = self.selected_image.clone() {
-                    if let Some(mdl) = &self.selected_model {
-                        if ui.button("Show Test").clicked() {
-                            self.current_buildings = None;
+                    let mut models = vec![];
 
-                            self.get_building_thread.set_field(
-                                "buildings",
-                                Err::<Vec<image_data_wrapper::Building>, FofError>(
-                                    FofError::ThreadNotInitialized,
-                                ),
-                            );
-                            self.get_building_thread
-                                .set_field("model_name", mdl.to_string());
-                            self.get_building_thread
-                                .set_field("path_to_image", img.to_string());
-                            self.get_building_thread
-                                .set_field("should_get_prediction", true);
-                            self.get_building_thread
-                                .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>(
-                                    "buildings",
-                                );
-                            self.current_buildings = None;
-                            self.current_avg_conf = None;
+                    if let Some(mdl) = &self.selected_build_model {
+                        models.push(mdl);
+                    }
+                    if let Some(mdl) = &self.selected_lvls_model {
+                        models.push(mdl);
+                    }
+
+                    if !models.is_empty() {
+                        if ui.button("Show Test").clicked() {
+                            self.current_buildings_lvls = None;
+                            self.current_buildings_build = None;
+                            self.current_avg_conf_lvls = None;
+                            self.current_avg_conf_build = None;
                             self.in_test_mode = true;
+
+                            for (idx, mdl) in models.iter().enumerate() {
+                                if idx == 0 {
+                                    self.get_building_thread_lvls.set_field(
+                                        "buildings",
+                                        Err::<Vec<image_data_wrapper::Building>, FofError>(
+                                            FofError::ThreadNotInitialized,
+                                        ),
+                                    );
+                                    self.get_building_thread_lvls
+                                        .set_field("model_name", mdl.to_string());
+                                    self.get_building_thread_lvls
+                                        .set_field("path_to_image", img.to_string());
+                                    self.get_building_thread_lvls
+                                        .set_field("should_get_prediction", true);
+                                    self.get_building_thread_lvls.poll_field::<Result<
+                                        Vec<image_data_wrapper::Building>,
+                                        FofError,
+                                    >>(
+                                        "buildings"
+                                    );
+                                } else {
+                                    self.get_building_thread_build.set_field(
+                                        "buildings",
+                                        Err::<Vec<image_data_wrapper::Building>, FofError>(
+                                            FofError::ThreadNotInitialized,
+                                        ),
+                                    );
+                                    self.get_building_thread_build
+                                        .set_field("model_name", mdl.to_string());
+                                    self.get_building_thread_build
+                                        .set_field("path_to_image", img.to_string());
+                                    self.get_building_thread_build
+                                        .set_field("should_get_prediction", true);
+                                    self.get_building_thread_build.poll_field::<Result<
+                                        Vec<image_data_wrapper::Building>,
+                                        FofError,
+                                    >>(
+                                        "buildings"
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -1547,7 +1679,8 @@ impl ScreenshotApp {
                                 let (img_w, img_h) = (size[0], size[1]);
 
                                 // Now call recompute_buildings every frame
-                                let buildings_to_draw = self.recompute_buildings();
+                                self.update_buildings();
+                                let mut buildings_to_draw = self.recompute_buildings();
 
                                 // Update wall connections each frame if enabled (we mutate self here)
                                 if self.connect_walls_enabled {
@@ -1560,6 +1693,16 @@ impl ScreenshotApp {
                                     self.wall_connections = connections;
                                 } else {
                                     self.wall_connections.clear();
+                                }
+                                if self.combine_models_enabled {
+                                    if let Some(level) = &self.current_buildings_lvls {
+                                        buildings_to_draw =
+                                            filter_buildings::connect_level_and_buildings(
+                                                &buildings_to_draw,
+                                                level,
+                                                self.min_iou,
+                                            )
+                                    }
                                 }
 
                                 // Finally draw overlays
@@ -1618,15 +1761,25 @@ impl ScreenshotApp {
                     ui.add_sized(
                         vec2(300., 50.),
                         egui::Slider::new(&mut self.min_dist_to_connect, 1.0..=100.0)
-                            .step_by(0.5)
+                            .step_by(0.01)
                             .text("min dist px"),
                     );
                 }
 
                 ui.separator();
 
-                ui.checkbox(&mut self.combine_models_enabled, "Combine models (no-op)");
-                ui.separator();
+                if self.selected_lvls_model.is_some() && self.selected_build_model.is_some() {
+                    ui.checkbox(&mut self.combine_models_enabled, "Combine models");
+                    if self.combine_models_enabled {
+                        ui.add_sized(
+                            vec2(300., 50.),
+                            egui::Slider::new(&mut self.min_dist_to_connect, 0.001..=1.0)
+                                .step_by(0.5)
+                                .text("min iou"),
+                        );
+                    }
+                    ui.separator();
+                }
 
                 ui.checkbox(&mut self.show_img, "Show Image");
 
@@ -2615,7 +2768,7 @@ impl ScreenshotApp {
                         self.selected_images.len() - self.labeling_que.len(),
                         self.selected_images.len(),
                         self.ja_nein_idx,
-                        self.current_buildings.clone().unwrap_or(vec![]).len()
+                        self.current_buildings_build.clone().unwrap_or(vec![]).len()
                     )
                 },
                 RED,
@@ -2646,16 +2799,27 @@ impl ScreenshotApp {
                 self.current_labeling_mode = None;
                 self.rauthaus_das_man_gerade_labeled = LabelRathaus::Gemischt;
                 self.selected_model = None;
-                self.current_buildings = None;
-                self.get_building_thread.set_field(
+                self.current_buildings_build = None;
+                self.current_buildings_lvls = None;
+                self.get_building_thread_lvls.set_field(
                     "buildings",
                     Err::<Vec<image_data_wrapper::Building>, FofError>(
                         FofError::ThreadNotInitialized,
                     ),
                 );
-                self.get_building_thread
+                self.get_building_thread_lvls
                     .set_field("path_to_image", "".to_string());
-                self.get_building_thread
+                self.get_building_thread_lvls
+                    .set_field("model_name", "".to_string());
+                self.get_building_thread_build.set_field(
+                    "buildings",
+                    Err::<Vec<image_data_wrapper::Building>, FofError>(
+                        FofError::ThreadNotInitialized,
+                    ),
+                );
+                self.get_building_thread_build
+                    .set_field("path_to_image", "".to_string());
+                self.get_building_thread_build
                     .set_field("model_name", "".to_string());
                 self.ja_nein_idx = 0;
             } else {
@@ -2696,15 +2860,25 @@ impl ScreenshotApp {
             if self.ja_nein_idx >= buildings.len() {
                 self.labeling_que.pop();
                 self.ja_nein_idx = 0;
-                self.get_building_thread.set_field(
+                self.get_building_thread_lvls.set_field(
                     "buildings",
                     Err::<Vec<image_data_wrapper::Building>, FofError>(
                         FofError::ThreadNotInitialized,
                     ),
                 );
-                self.get_building_thread
+                self.get_building_thread_lvls
                     .set_field("path_to_image", "".to_string());
-                self.get_building_thread
+                self.get_building_thread_lvls
+                    .set_field("model_name", "".to_string());
+                self.get_building_thread_build.set_field(
+                    "buildings",
+                    Err::<Vec<image_data_wrapper::Building>, FofError>(
+                        FofError::ThreadNotInitialized,
+                    ),
+                );
+                self.get_building_thread_build
+                    .set_field("path_to_image", "".to_string());
+                self.get_building_thread_build
                     .set_field("model_name", "".to_string());
             }
         }
@@ -2717,14 +2891,23 @@ impl ScreenshotApp {
             self.current_labeling_mode = None;
             self.rauthaus_das_man_gerade_labeled = LabelRathaus::Gemischt;
             self.selected_model = None;
-            self.current_buildings = None;
-            self.get_building_thread.set_field(
+            self.current_buildings_build = None;
+            self.current_buildings_lvls = None;
+            self.get_building_thread_lvls.set_field(
                 "buildings",
                 Err::<Vec<image_data_wrapper::Building>, FofError>(FofError::ThreadNotInitialized),
             );
-            self.get_building_thread
+            self.get_building_thread_lvls
                 .set_field("path_to_image", "".to_string());
-            self.get_building_thread
+            self.get_building_thread_lvls
+                .set_field("model_name", "".to_string());
+            self.get_building_thread_build.set_field(
+                "buildings",
+                Err::<Vec<image_data_wrapper::Building>, FofError>(FofError::ThreadNotInitialized),
+            );
+            self.get_building_thread_build
+                .set_field("path_to_image", "".to_string());
+            self.get_building_thread_build
                 .set_field("model_name", "".to_string());
             self.ja_nein_idx = 0;
         }
@@ -2868,24 +3051,6 @@ impl ScreenshotApp {
                     }
                 } else {
                     ui.label("Kein Bild ausgewählt.");
-                }
-            } else if is_running && labeling_mode == LabelingMode::JaNein {
-                if let Some(selected) = self.labeling_que.clone().last() {
-                    if let Some(model) = &self.selected_model {
-                        if let Some(builds) = self.current_buildings.clone() {
-                            if let Some(this_building) = builds.get(self.ja_nein_idx) {
-                                todo!("impl JaNein");
-                            }
-                        } else {
-                            self.get_building_thread
-                                .set_field("model_name", model.clone());
-                            self.get_building_thread
-                                .set_field("path_to_image", selected.clone());
-                            self.get_building_thread
-                                .set_field("should_get_prediction", true);
-                            self.update_buildings();
-                        }
-                    }
                 }
             }
         }
