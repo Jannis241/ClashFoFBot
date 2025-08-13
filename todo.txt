@@ -10,3 +10,5 @@ jesko:
 
 jannis:
 - linien verbinden
+- filter confidence funktion
+
