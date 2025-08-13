@@ -55,7 +55,7 @@ pub fn connect_level_and_buildings(
                     result.push(Building {
                         class_id: -1,
                         class_name: format!("{}{}", building.class_name, lvl.class_name),
-                        confidence: -6.9,
+                        confidence: -6.969696900069696969696,
                         bounding_box: avg_bbox,
                     });
                 }

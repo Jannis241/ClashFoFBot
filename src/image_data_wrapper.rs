@@ -298,7 +298,6 @@ where
         return Err(FofError::FailedReadingFile(screenshot_path.to_string()));
     }
 
-    dbg!("lösche und erstelle jetzt communication neu");
     remove_communication(model_name);
     create_communication(model_name);
 
@@ -310,10 +309,8 @@ where
         ))
     })?;
 
-    dbg!("Starte jetzt python");
-    let args = vec!["src/image_data.py", "--predict", "--model_name", model_name];
+    let args = vec!["src/image_data.py", "--predict", "--model-name", model_name];
     let python_output = start_python(args)?;
-    println!("Python output: {}", python_output);
 
     let data_path = format!("Communication/{}/data.json", model_name);
     if !check_if_exists(&data_path)? {

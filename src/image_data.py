@@ -7,7 +7,6 @@ def write_data(data, model_name):
     data_path = f"Communication/{model_name}/data.json"
     os.makedirs(os.path.dirname(data_path), exist_ok=True)
 
-    print("Schreib data.json in: ", data_path)
     with open(data_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4)
 
@@ -110,14 +109,11 @@ def testvals(model_name,data_set_type):
 
 
 def write_prediction_to_json(model_name):
-    print("ich bin jetzt hier in python und bekomme gleich die prediction von dem model.")
     image_path = f"Communication/{model_name}/screenshot.png"
     model_path = f"runs/detect/{model_name}/weights/best.pt"
     model = YOLO(model_path)
     results = model.predict(source=image_path, max_det= 999999999, conf=0.0)[0]
     class_names = model.names  # z. B. {0: "cannon", 1: "elixir", ...}
-    print("Prediction ist da!")
-
     output = []
     for box in results.boxes:
         cls_id = int(box.cls[0].item())              # class index (int)
@@ -165,6 +161,5 @@ if args.train:
 
 
 if args.predict:
-    print("hallo ich bin python und ich habe die anweisung bekommen eine prediction zu machen!")
     write_prediction_to_json(args.model_name)
 
