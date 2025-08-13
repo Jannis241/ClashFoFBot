@@ -277,6 +277,7 @@ pub struct ScreenshotApp {
     pub connect_walls_enabled: bool, // default false
     pub min_dist_to_connect: f32,    // default 32.0
     pub min_iou: f32,
+    pub angle_variance: f32,
     pub find_hidden_walls_enabled: bool, // default false
     pub combine_models_enabled: bool,    // no-op for now
     pub show_img: bool,
@@ -544,6 +545,7 @@ impl Default for ScreenshotApp {
             connect_walls_enabled: false,
             min_dist_to_connect: 32.0,
             min_iou: 10.,
+            angle_variance: 10.,
             find_hidden_walls_enabled: false,
             combine_models_enabled: false,
             show_img: true,
@@ -1767,7 +1769,13 @@ impl ScreenshotApp {
                         vec2(300., 50.),
                         egui::Slider::new(&mut self.min_dist_to_connect, 1.0..=100.0)
                             .step_by(0.5)
-                            .text("min dist px"),
+                            .text("Max dist px"),
+                    );
+                    ui.add_sized(
+                        vec2(300., 50.),
+                        egui::Slider::new(&mut self.angle_variance, 1.0..=100.0)
+                            .step_by(0.5)
+                            .text("Max Angle Variance"),
                     );
                 }
 
@@ -1780,7 +1788,7 @@ impl ScreenshotApp {
                             vec2(300., 50.),
                             egui::Slider::new(&mut self.min_iou, 0.001..=1000.0)
                                 .step_by(0.001)
-                                .text("min iou"),
+                                .text("Max IOU"),
                         );
                     }
                     ui.separator();
@@ -3263,7 +3271,7 @@ impl ScreenshotApp {
                             vec2(300., 50.),
                             egui::Slider::new(&mut self.min_iou, 0.001..=1.0)
                                 .step_by(0.001)
-                                .text("min iou"),
+                                .text("Max IOU"),
                         );
                     } else {
                         self.start_getting_builds(selected.to_string());
