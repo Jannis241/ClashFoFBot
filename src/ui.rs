@@ -1405,7 +1405,7 @@ impl ScreenshotApp {
                     {
                         println!("Modell gelöscht: {name}");
                         let res = image_data_wrapper::delete_model(&name.to_string());
-                        if let Some(e) = res {
+                        if let Err(e) = res {
                             self.create_error(
                                 format!("Konnte Model nicht löschen: {:?}", e),
                                 MessageType::Error,
