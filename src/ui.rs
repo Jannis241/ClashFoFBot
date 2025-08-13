@@ -3,10 +3,13 @@ use crate::{
     prelude::*,
     threading::WorkerHandle,
 };
-use eframe::egui::{
-    vec2, Id,
-    Key::{self, *},
-    Pos2, Slider, Vec2,
+use eframe::{
+    egui::{
+        vec2, Id,
+        Key::{self, *},
+        Pos2, Slider, Vec2,
+    },
+    glow::LEFT,
 };
 use egui::Rect;
 
@@ -321,7 +324,6 @@ pub struct ScreenshotApp {
     current_avg_conf_build: Option<f32>,
     current_epochen: String,
     rauthaus_das_man_gerade_labeled: LabelRathaus,
-    ja_nein_idx: usize,
 }
 
 // fn patch_and_save_image_no_overlap(
@@ -606,7 +608,6 @@ impl Default for ScreenshotApp {
             in_test_mode: false,
             current_epochen: "".to_string(),
             rauthaus_das_man_gerade_labeled: LabelRathaus::Gemischt,
-            ja_nein_idx: 0,
             current_sub_img: None,
         };
 
@@ -2459,7 +2460,7 @@ impl ScreenshotApp {
         prefix.to_string()
     }
 
-    fn save_labeld_rects(&mut self, buildings_only: bool) {
+    fn save_labeld_rects(&mut self, levels_only: bool, buildings_only: bool) {
         if let Some(image_path) = self.labeling_que.clone().last() {
             let mut rng = rand::thread_rng();
             self.create_error("Speichere YOLO-Labels...", MessageType::Success);
@@ -2495,6 +2496,8 @@ impl ScreenshotApp {
 
             if buildings_only {
                 dataset_paths.pop();
+            } else if levels_only {
+                dataset_paths = vec![dataset_paths.last().unwrap().clone()];
             }
 
             for (idx, (dataset_base, label_regex)) in dataset_paths.iter().enumerate() {
@@ -2842,21 +2845,11 @@ impl ScreenshotApp {
 
         let (button_text, button_color) = if is_running {
             (
-                if self.current_labeling_mode == Some(LabelingMode::Manual) {
-                    format!(
-                        "Stop Session({}/{} Bildern Gelabelt)",
-                        self.selected_images.len() - self.labeling_que.len(),
-                        self.selected_images.len()
-                    )
-                } else {
-                    format!(
-                        "Stop Session({}/{} Bildern Gelabelt | {}/{} buildings)",
-                        self.selected_images.len() - self.labeling_que.len(),
-                        self.selected_images.len(),
-                        self.ja_nein_idx,
-                        self.current_buildings_build.clone().unwrap_or(vec![]).len()
-                    )
-                },
+                format!(
+                    "Stop Session({}/{} Bildern Gelabelt)",
+                    self.selected_images.len() - self.labeling_que.len(),
+                    self.selected_images.len()
+                ),
                 RED,
             ) // rot
         } else {
@@ -2907,7 +2900,6 @@ impl ScreenshotApp {
                     .set_field("path_to_image", "".to_string());
                 self.get_building_thread_build
                     .set_field("model_name", "".to_string());
-                self.ja_nein_idx = 0;
             } else {
                 self.labeling_que = self.selected_images.iter().cloned().collect();
                 self.create_error("Session gestartet", MessageType::Success);
@@ -2923,50 +2915,42 @@ impl ScreenshotApp {
     ) {
         if !skip {
             if !janein {
-                self.save_labeld_rects(false);
+                self.save_labeld_rects(false, false);
             } else {
-                let save_path = "JaNeinImgs/DuAALhihihihfof".to_string();
-                dbg!(&save_path);
-                let res = self
-                    .current_sub_img
-                    .clone()
-                    .unwrap()
-                    .save(save_path.clone());
-                dbg!(&res);
-                self.labeling_que.push(save_path);
-                self.save_labeld_rects(true);
-                self.labeling_que.pop();
+                let slv = self.selected_lvls_model.is_none();
+                let slb = self.selected_build_model.is_none();
+                if slv && slb {
+                    panic!()
+                } else if slv && !slb {
+                    self.save_labeld_rects(false, true);
+                } else if !slv && slb {
+                    self.save_labeld_rects(true, false);
+                } else if !slv && !slb {
+                    self.save_labeld_rects(true, true);
+                }
             }
         }
 
         if !janein {
             self.labeling_que.pop();
         } else {
-            self.ja_nein_idx += 1;
-            if self.ja_nein_idx >= buildings.len() {
-                self.labeling_que.pop();
-                self.ja_nein_idx = 0;
-                self.get_building_thread_lvls.set_field(
-                    "buildings",
-                    Err::<Vec<image_data_wrapper::Building>, FofError>(
-                        FofError::ThreadNotInitialized,
-                    ),
-                );
-                self.get_building_thread_lvls
-                    .set_field("path_to_image", "".to_string());
-                self.get_building_thread_lvls
-                    .set_field("model_name", "".to_string());
-                self.get_building_thread_build.set_field(
-                    "buildings",
-                    Err::<Vec<image_data_wrapper::Building>, FofError>(
-                        FofError::ThreadNotInitialized,
-                    ),
-                );
-                self.get_building_thread_build
-                    .set_field("path_to_image", "".to_string());
-                self.get_building_thread_build
-                    .set_field("model_name", "".to_string());
-            }
+            self.labeling_que.pop();
+            self.get_building_thread_lvls.set_field(
+                "buildings",
+                Err::<Vec<image_data_wrapper::Building>, FofError>(FofError::ThreadNotInitialized),
+            );
+            self.get_building_thread_lvls
+                .set_field("path_to_image", "".to_string());
+            self.get_building_thread_lvls
+                .set_field("model_name", "".to_string());
+            self.get_building_thread_build.set_field(
+                "buildings",
+                Err::<Vec<image_data_wrapper::Building>, FofError>(FofError::ThreadNotInitialized),
+            );
+            self.get_building_thread_build
+                .set_field("path_to_image", "".to_string());
+            self.get_building_thread_build
+                .set_field("model_name", "".to_string());
         }
 
         if self.labeling_que.is_empty() {
@@ -2995,7 +2979,6 @@ impl ScreenshotApp {
                 .set_field("path_to_image", "".to_string());
             self.get_building_thread_build
                 .set_field("model_name", "".to_string());
-            self.ja_nein_idx = 0;
         }
         self.image_texture = None;
         self.labeled_rects.clear();
@@ -3078,13 +3061,76 @@ impl ScreenshotApp {
 
         if let Some(labeling_mode) = self.current_labeling_mode.clone() {
             if labeling_mode == LabelingMode::JaNein {
-                self.show_selectable_models(ui);
-                if let Some(model) = self.selected_model.clone() {
-                    if let Ok(image_data_wrapper::DatasetType::Level) =
-                        image_data_wrapper::get_dataset_type(&model)
-                    {
-                        ui.colored_label(YELLOW, "ACHTUNG!! das ausgewhählte model ist Ein Level Model, was nicht gut mit der JaNein Funktion funktioniert.");
-                    }
+                self.current_models.sort_by(|a, b| {
+                    a.rating
+                        .partial_cmp(&b.rating)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+
+                egui::ComboBox::from_label("Model(s) auswählen")
+                    .selected_text({
+                        let slv = self.selected_lvls_model.is_none();
+                        let slb = self.selected_build_model.is_none();
+                        if slv && slb {
+                            format!("Kein Model Ausgewählt")
+                        } else {
+                            format!(
+                                "lvl: {}, bld: {}",
+                                self.selected_lvls_model
+                                    .clone()
+                                    .unwrap_or("None".to_string()),
+                                self.selected_build_model
+                                    .clone()
+                                    .unwrap_or("None".to_string())
+                            )
+                        }
+                    })
+                    .show_ui(ui, |ui| {
+                        for model in self.current_models.clone() {
+                            let score = model.rating;
+                            let name = model.name;
+
+                            let label = format!(
+                                "{name} ({score:.2}) Typ: {}",
+                                match model.dataset_type {
+                                    image_data_wrapper::DatasetType::Buildings =>
+                                        "🏗️ Building Model",
+                                    image_data_wrapper::DatasetType::Level => "🎯 Level Model",
+                                }
+                            );
+                            let dataset_type = image_data_wrapper::get_dataset_type(&name).unwrap();
+
+                            if ui
+                                .selectable_label(
+                                    self.selected_lvls_model.as_deref() == Some(&name)
+                                        || self.selected_build_model.as_deref() == Some(&name),
+                                    RichText::new(label).color(
+                                        if dataset_type
+                                            == image_data_wrapper::DatasetType::Buildings
+                                        {
+                                            Color32::BROWN
+                                        } else if dataset_type
+                                            == image_data_wrapper::DatasetType::Level
+                                        {
+                                            Color32::PURPLE
+                                        } else {
+                                            unreachable!()
+                                        },
+                                    ),
+                                )
+                                .clicked()
+                            {
+                                if dataset_type == image_data_wrapper::DatasetType::Buildings {
+                                    self.selected_build_model = Some(name);
+                                } else if dataset_type == image_data_wrapper::DatasetType::Level {
+                                    self.selected_lvls_model = Some(name);
+                                }
+                                self.create_error("Model geändert", MessageType::Success);
+                            }
+                        }
+                    });
+
+                if self.selected_lvls_model.is_some() || self.selected_build_model.is_some() {
                     self.session_button(ui);
                 }
             } else {
@@ -3139,6 +3185,110 @@ impl ScreenshotApp {
                     ui.label("Kein Bild ausgewählt.");
                 }
             }
+            if is_running && labeling_mode == LabelingMode::JaNein {
+                self.ja_nein(ui, ctx);
+            }
+        }
+    }
+
+    fn ja_nein(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        self.update_buildings();
+
+        let combined_buildings;
+
+        let bb = self.selected_build_model.is_none();
+        let bl = self.selected_lvls_model.is_none();
+
+        if bl && bb {
+            return;
+        } else if bl && !bb {
+            if let Some(bldngs) = self.current_buildings_build.clone() {
+                combined_buildings = bldngs;
+            } else {
+                return;
+            }
+        } else if !bl && bb {
+            if let Some(bldngs) = self.current_buildings_lvls.clone() {
+                combined_buildings = bldngs;
+            } else {
+                return;
+            }
+        } else if !bl && !bb {
+            if let Some(bldngsb) = self.current_buildings_build.clone() {
+                if let Some(bldngsl) = self.current_buildings_build.clone() {
+                    combined_buildings = filter_buildings::connect_level_and_buildings(
+                        &bldngsb,
+                        &bldngsl,
+                        self.min_iou,
+                    );
+                    ui.add_sized(
+                        vec2(300., 50.),
+                        egui::Slider::new(&mut self.min_dist_to_connect, 0.001..=1.0)
+                            .step_by(0.001)
+                            .text("min iou"),
+                    );
+                } else {
+                    return;
+                }
+            } else {
+                return;
+            }
+        } else {
+            unreachable!()
+        }
+
+        if let Some(selected) = self.labeling_que.last() {
+            self.update_image_texture(ctx, selected.to_string());
+
+            if let Some(texture) = &self.image_texture {
+                let (img, scale) = self.get_scaled_texture(ctx, ui, true, texture);
+                let response = ui.add(img);
+
+                // Das gezeichnete Rechteck
+                let rect = response.rect;
+
+                let (scale_x, scale_y) = (texture.size()[0] as f32, texture.size()[1] as f32);
+
+                let mut new_labeled_rects = vec![];
+                for buld in combined_buildings {
+                    new_labeled_rects.push(SmthLabeled::Rect(LabeledRect {
+                        rect: egui::Rect::from_two_pos(
+                            egui::Pos2::new(
+                                buld.bounding_box.0 * scale_x,
+                                buld.bounding_box.1 * scale_y,
+                            ),
+                            egui::Pos2::new(
+                                buld.bounding_box.2 * scale_x,
+                                buld.bounding_box.3 * scale_y,
+                            ),
+                        ),
+                        label: buld.class_name,
+                    }));
+                }
+
+                self.labeled_rects = new_labeled_rects;
+
+                if let Some(keybind) = self.keybinds.get(&Function::SaveImg) {
+                    if let Keybind::Done(keybind) = keybind {
+                        if ctx.input(|i| i.key_pressed(*keybind)) {
+                            self.reset_labeling(false, false, vec![]);
+                        }
+                    }
+                }
+
+                if let Some(keybind) = self.keybinds.get(&Function::SkipImg) {
+                    if let Keybind::Done(keybind) = keybind {
+                        if ctx.input(|i| i.key_pressed(*keybind)) {
+                            self.reset_labeling(true, false, vec![]);
+                            self.create_error("Bild Übersprungen", MessageType::Success);
+                        }
+                    }
+                }
+
+                self.draw_rects(ui, ctx, rect);
+            }
+        } else {
+            ui.label("Kein Bild ausgewählt.");
         }
     }
 }
