@@ -315,7 +315,7 @@ where
     let data_path = format!("Communication/{}/data.json", model_name);
     if !check_if_exists(&data_path)? {
         return Err(FofError::FailedReadingFile(
-            "failed reading data.json in Communication".to_string(),
+            format!("data.json in {} nicht gefunden", data_path).to_string(),
         ));
     }
 

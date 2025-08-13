@@ -6,6 +6,8 @@ import argparse
 def write_data(data, model_name):
     data_path = f"Communication/{model_name}/data.json"
     os.makedirs(os.path.dirname(data_path), exist_ok=True)
+
+    print("Schreib data.json in: ", data_path)
     with open(data_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4)
 
