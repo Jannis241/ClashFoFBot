@@ -1634,8 +1634,6 @@ impl ScreenshotApp {
                                 let size = vec2(texture.size()[0] as f32, texture.size()[1] as f32)
                                     * scale;
 
-                                dbg!(&size);
-
                                 let (rect, resp_alloc) =
                                     ui.allocate_exact_size(size, egui::Sense::drag());
 
@@ -1849,8 +1847,6 @@ impl ScreenshotApp {
 
         let scale_x = image_rect.width() / image_px_size.0;
         let scale_y = image_rect.height() / image_px_size.1;
-
-        dbg!(scale_x, scale_y);
 
         let image_to_ui = |px_x, px_y| {
             Pos2::new(
