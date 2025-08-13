@@ -1,5 +1,7 @@
 use crate::image_data_wrapper::Building;
 use crate::prelude::*;
+use crate::prelude::*;
+use std::collections::HashMap;
 
 type BoundingBox = (f32, f32, f32, f32);
 type Point = (f32, f32);
@@ -10,7 +12,7 @@ struct Wall {
     processed: bool,
 }
 
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 enum Direction {
     TopRight,
     TopLeft,
@@ -18,102 +20,147 @@ enum Direction {
     BottomLeft,
 }
 
+fn angle_diff(a: f32, b: f32) -> f32 {
+    let mut diff = (a - b) % 360.0;
+    if diff < -180.0 {
+        diff += 360.0;
+    }
+    if diff > 180.0 {
+        diff -= 360.0;
+    }
+    diff.abs()
+}
+
 impl Wall {
     fn new(bbox: BoundingBox) -> Self {
-        let processed = false;
-        Self { bbox, processed }
+        Self {
+            bbox,
+            processed: false,
+        }
     }
 
     fn get_center_of_bbox(&self) -> Point {
         let (x_min, y_min, x_max, y_max) = self.bbox;
         ((x_min + x_max) / 2.0, (y_min + y_max) / 2.0)
     }
+
     fn distance(p1: Point, p2: Point) -> f32 {
         let dx = p2.0 - p1.0;
         let dy = p2.1 - p1.1;
         (dx * dx + dy * dy).sqrt()
     }
-    fn calc_dist_to_other(&self, other: &Wall) -> f32 {
-        let center1 = self.get_center_of_bbox();
-        let center2 = other.get_center_of_bbox();
 
-        Wall::distance(center1, center2)
+    fn calc_dist_to_other(&self, other: &Wall) -> f32 {
+        Wall::distance(self.get_center_of_bbox(), other.get_center_of_bbox())
     }
+
     fn create_line_to_other(&self, other: &Wall) -> (Point, Point) {
         (self.get_center_of_bbox(), other.get_center_of_bbox())
     }
-    fn get_dir_to_other(&self, other: &Wall) -> Direction {
+
+    fn get_dir_to_other(&self, other: &Wall, angle_tolerance_deg: f32) -> Option<Direction> {
         let my_center = self.get_center_of_bbox();
         let other_center = other.get_center_of_bbox();
-        match (my_center.0 > other_center.0, other_center.1 > my_center.1) {
-            (true, true) => Direction::BottomRight,
-            (true, false) => Direction::TopRight,
-            (false, true) => Direction::BottomLeft,
-            (false, false) => Direction::BottomRight,
+
+        let dx = other_center.0 - my_center.0;
+        let dy = other_center.1 - my_center.1;
+
+        // Winkel in Grad (y nach unten → evtl. invertieren falls y-Achse oben 0 hat)
+        let angle_deg = dy.atan2(dx).to_degrees();
+
+        // Definierte Zielwinkel für jede Richtung
+        let directions = [
+            (Direction::TopRight, -45.0),
+            (Direction::BottomRight, 45.0),
+            (Direction::BottomLeft, 135.0),
+            (Direction::TopLeft, -135.0),
+        ];
+
+        for (dir, target_angle) in directions {
+            if angle_diff(angle_deg, target_angle) <= angle_tolerance_deg {
+                return Some(dir);
+            }
         }
+
+        None
     }
+
     fn set_processed(&mut self, state: bool) {
         self.processed = state;
     }
-    fn get_neighbors(&self, all_walls: &Vec<Wall>, dist: f32) -> Vec<Wall> {
-        let mut neighbors: HashMap<Direction, Wall> = HashMap::new();
+
+    fn get_neighbors<'a>(
+        &self,
+        all_walls: &'a [Wall],
+        dist: f32,
+        angle_tolerance_deg: f32,
+    ) -> Vec<&'a Wall> {
+        let mut neighbors: HashMap<Direction, &'a Wall> = HashMap::new();
         let mut distances: HashMap<Direction, f32> = HashMap::new();
+
         for wall in all_walls {
             if wall.processed || wall == self {
                 continue;
             }
 
             let distance = self.calc_dist_to_other(wall);
+            if distance > dist {
+                continue;
+            }
 
-            if distance <= dist {
-                // potenzielle connection
-                let direction = self.get_dir_to_other(wall);
+            let Some(direction) = self.get_dir_to_other(wall, angle_tolerance_deg) else {
+                continue;
+            };
 
-                if &distance < &distances.get(&direction).unwrap_or(&99999.0) {
-                    distances.insert(direction.clone(), distance);
-                    neighbors.insert(direction.clone(), wall.clone());
-                }
+            let current_best = *distances.get(&direction).unwrap_or(&f32::MAX);
+
+            if distance < current_best {
+                distances.insert(direction.clone(), distance);
+                neighbors.insert(direction.clone(), wall);
             }
         }
-        let mut r = Vec::new();
-        for (k, v) in neighbors {
-            r.push(v);
-        }
-        r
+
+        neighbors.into_values().collect()
     }
 }
 
 pub fn connect_walls(
-    buildings: &Vec<Building>,
+    buildings: &[Building],
     min_dist_to_connect: f32,
+    angle_tolerance_deg: f32,
 ) -> (Vec<Building>, Vec<((f32, f32), (f32, f32))>) {
     let mut buildings_without_walls = Vec::new();
     let mut walls = Vec::new();
     let mut wall_lines: Vec<((f32, f32), (f32, f32))> = Vec::new();
 
-    for building in buildings.clone() {
+    // Mauern von normalen Gebäuden trennen
+    for building in buildings.iter().cloned() {
         if building.class_name.as_str() == "mauer" {
-            let wall = Wall::new(building.bounding_box);
-            walls.push(wall);
+            walls.push(Wall::new(building.bounding_box));
         } else {
             buildings_without_walls.push(building);
         }
     }
 
-    for mut wall in walls.clone() {
-        let neighbors = wall.get_neighbors(&walls, min_dist_to_connect);
-        if neighbors.len() == 0 {
-            // wall ist alleine
-            // todo: so machen dass die line nicht den selben start und endpunkt hat sondern
-            // bisschen fetter ist
-            let line = wall.create_line_to_other(&Wall::new(wall.bbox));
-            wall_lines.push(line);
+    // Jede Mauer verbinden
+    for i in 0..walls.len() {
+        if walls[i].processed {
+            continue;
         }
-        for neighbor_wall in neighbors {
-            let line = wall.create_line_to_other(&neighbor_wall);
+
+        let neighbors = walls[i].get_neighbors(&walls, min_dist_to_connect, angle_tolerance_deg);
+
+        if neighbors.is_empty() {
+            // Einzelne Mauer: kurzer Dummy-Strich
+            let line = walls[i].create_line_to_other(&walls[i]);
             wall_lines.push(line);
+        } else {
+            for neighbor in neighbors {
+                wall_lines.push(walls[i].create_line_to_other(neighbor));
+            }
         }
-        wall.set_processed(true);
+
+        walls[i].set_processed(true);
     }
 
     (buildings_without_walls, wall_lines)
