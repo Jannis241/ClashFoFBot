@@ -1529,12 +1529,24 @@ impl ScreenshotApp {
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
 
-                egui::ComboBox::from_label("Modell auswählen")
-                    .selected_text(
-                        self.selected_model
-                            .clone()
-                            .unwrap_or_else(|| "Kein Modell gewählt".into()),
-                    )
+                egui::ComboBox::from_label("Model(s) auswählen")
+                    .selected_text({
+                        let slv = self.selected_lvls_model.is_none();
+                        let slb = self.selected_build_model.is_none();
+                        if slv && slb {
+                            format!("Kein Model Ausgewählt")
+                        } else {
+                            format!(
+                                "lvl: {}, bld: {}",
+                                self.selected_lvls_model
+                                    .clone()
+                                    .unwrap_or("None".to_string()),
+                                self.selected_build_model
+                                    .clone()
+                                    .unwrap_or("None".to_string())
+                            )
+                        }
+                    })
                     .show_ui(ui, |ui| {
                         for model in self.current_models.clone() {
                             let score = model.rating;
@@ -1548,17 +1560,28 @@ impl ScreenshotApp {
                                     image_data_wrapper::DatasetType::Level => "🎯 Level Model",
                                 }
                             );
+                            let dataset_type = image_data_wrapper::get_dataset_type(&name).unwrap();
 
                             if ui
                                 .selectable_label(
                                     self.selected_lvls_model.as_deref() == Some(&name)
                                         || self.selected_build_model.as_deref() == Some(&name),
-                                    label,
+                                    RichText::new(label).color(
+                                        if dataset_type
+                                            == image_data_wrapper::DatasetType::Buildings
+                                        {
+                                            Color32::BROWN
+                                        } else if dataset_type
+                                            == image_data_wrapper::DatasetType::Level
+                                        {
+                                            Color32::PURPLE
+                                        } else {
+                                            unreachable!()
+                                        },
+                                    ),
                                 )
                                 .clicked()
                             {
-                                let dataset_type =
-                                    image_data_wrapper::get_dataset_type(&name).unwrap();
                                 if dataset_type == image_data_wrapper::DatasetType::Buildings {
                                     self.selected_build_model = Some(name);
                                 } else if dataset_type == image_data_wrapper::DatasetType::Level {
@@ -1761,7 +1784,7 @@ impl ScreenshotApp {
                     ui.add_sized(
                         vec2(300., 50.),
                         egui::Slider::new(&mut self.min_dist_to_connect, 1.0..=100.0)
-                            .step_by(0.01)
+                            .step_by(0.5)
                             .text("min dist px"),
                     );
                 }
@@ -1774,7 +1797,7 @@ impl ScreenshotApp {
                         ui.add_sized(
                             vec2(300., 50.),
                             egui::Slider::new(&mut self.min_dist_to_connect, 0.001..=1.0)
-                                .step_by(0.5)
+                                .step_by(0.001)
                                 .text("min iou"),
                         );
                     }
@@ -1799,6 +1822,69 @@ impl ScreenshotApp {
                         .step_by(0.01)
                         .text("Min Conf:"),
                 );
+
+                // Now overlay the lines
+                let slider_range = 0.001..=1.0;
+
+                // The last widget we added is the slider, so we can get its rect:
+                let slider_rect = ui.clip_rect(); // This is too big, so let's capture it properly
+                let slider_response = ui.add_sized(
+                    vec2(300.0, 50.0),
+                    Slider::new(&mut self.min_confidence, slider_range.clone())
+                        .step_by(0.01)
+                        .text("Min Conf:"),
+                );
+
+                let rect = slider_response.rect;
+                let painter = ui.painter();
+
+                // Function to convert a value in [min..max] to an X position in the slider rect
+                let map_value_to_x = |val: f32| {
+                    let t = ((val - slider_range.start())
+                        / (slider_range.end() - slider_range.start()))
+                    .clamp(0.0, 1.0);
+                    rect.left() + t * rect.width()
+                };
+
+                // Draw blue line for current_avg_conf_lvls
+                if let Some(val) = self.current_avg_conf_lvls {
+                    let x = map_value_to_x(val);
+                    painter.line_segment(
+                        [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                        Stroke::new(2.0, Color32::BLUE),
+                    );
+                }
+
+                // Draw red line for current_avg_conf_build
+                if let Some(val) = self.current_avg_conf_build {
+                    let x = map_value_to_x(val);
+                    painter.line_segment(
+                        [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                        Stroke::new(2.0, Color32::RED),
+                    );
+                }
+
+                //i have these vals:
+                // self.current_avg_conf_lvls: Option<f32>,
+                // self.current_avg_conf_build: Option<f32>,
+                // and the slider from the top,
+                // draw_two_lines one in blue where the current_avg_conf_lvls is
+                // and one in red where the current_buildings_build is
+                // make sure that the scaling aligns (when the min_conf slider is 0.5 and
+                // current_buildings_build is 0.4 the line should be to the left of the slider val)
+                //
+                // we are currentlie in a ui.vertical where i am writing this
+
+                //i have these vals:
+                // self.current_avg_conf_lvls: Option<f32>,
+                // self.current_avg_conf_build: Option<f32>,
+                // and the slider from the top,
+                // draw_two_lines one in blue where the current_avg_conf_lvls is
+                // and one in red where the current_buildings_build is
+                // make sure that the scaling aligns (when the min_conf slider is 0.5 and
+                // current_buildings_build is 0.4 the line should be to the left of the slider val)
+                //
+                // we are currentlie in a ui.vertical where i am writing this
             });
         });
     }
