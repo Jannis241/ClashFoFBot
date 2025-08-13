@@ -2,32 +2,12 @@ import json
 import os
 from ultralytics import YOLO
 import argparse
-# import cv2
-# import pytesseract
 
-# def read_number(path):
-#     img = cv2.imread(path)
-#
-#     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-#     _, thresh = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
-#
-#     custom_config = r'--oem 3 --psm 6 outputbase digits'
-#     text = pytesseract.image_to_string(thresh, config=custom_config)
-#
-#     return text
-
-
-
-
-def write_data(data):
-    print("Hallo hier ist python. Ich schreibe jetzt diese data in data.json: ", data)
-    file_path = "Communication/data.json"
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    with open(file_path, 'w', encoding='utf-8') as f:
+def write_data(data, model_name):
+    data_path = f"Communication/{model_name}/data.json"
+    os.makedirs(os.path.dirname(data_path), exist_ok=True)
+    with open(data_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4)
-    print(f"JSON Data erfolgreich in {file_path} geschrieben.")
-
-IMAGE_PATH = "Communication/screenshot.png"
 
 def create_new_model(model_name, data_set_type, yolo_model):
     model = YOLO(yolo_model)
@@ -36,19 +16,14 @@ def create_new_model(model_name, data_set_type, yolo_model):
     else:
         DATA_YAML = "dataset_level/data.yaml"
     model.train(data=DATA_YAML, epochs=1, name=model_name, augment=True)
-    print(f"Erstellung von '{model_name}'abgeschlossen. Das Modell findest du unter 'runs/detect/{model_name}/weights/best.pt'")
 
 def train_model(model_name, data_set_type, epochen):
-    print("Starte Training.")
     model_path = f"runs/detect/{model_name}/weights/best.pt"
-
     model = YOLO(model_path)
     if data_set_type == "buildings":
         DATA_YAML = "dataset_buildings/data.yaml"
     else:
         DATA_YAML = "dataset_level/data.yaml"
-
-
 
     model.train(
     data=DATA_YAML,
@@ -57,7 +32,6 @@ def train_model(model_name, data_set_type, epochen):
     batch=1,                   # je nach VRAM
          #accumulate=8, #nur für die ubutuntu user
        # workers=1,
-
     optimizer="AdamW",
     lr0=0.001,
     lrf=0.01,
@@ -65,8 +39,8 @@ def train_model(model_name, data_set_type, epochen):
     patience=round(epochen*0.3), #erstmal soll er undendlich lang trainieren
     warmup_epochs=50,#round(epochen*0.05),
     pretrained=True,
-        amp=True,
-      device=0, # geht nicht auf mac
+    amp=True,
+    device=0, # geht nicht auf mac
 
     # Augmentation (angepasst!):
     hsv_h=0.0,                 # Keine Farbanpassung!
@@ -107,8 +81,6 @@ def train_model(model_name, data_set_type, epochen):
     verbose=True,
     )
 
-    print("Training erfolgreich abgeschlossen.")
-
 def testvals(model_name,data_set_type):
     model_path = f"runs/detect/{model_name}/weights/best.pt"
     if data_set_type == "buildings":
@@ -136,16 +108,9 @@ def testvals(model_name,data_set_type):
 
 
 def write_prediction_to_json(model_name, image_path):
-
     model_path = f"runs/detect/{model_name}/weights/best.pt"
-
     model = YOLO(model_path)
-    # model = YOLO("yolov8n")
-
     results = model.predict(source=image_path, max_det= 999999999, conf=0.0)[0]
-
-   # results.show()
-
     class_names = model.names  # z. B. {0: "cannon", 1: "elixir", ...}
 
     output = []
@@ -161,9 +126,8 @@ def write_prediction_to_json(model_name, image_path):
             "confidence": conf,
             "bounding_box": (xyxy[0], xyxy[1], xyxy[2], xyxy[3])
         })
-    print("Output in python nach dem parsen des results von dem model. Das hier sollte jetzt in data.json geschrieben werden: ", output)
 
-    write_data(output)
+    write_data(output, model_name)
 
 parser = argparse.ArgumentParser(description="Trainings- und Vorhersagemodus für YOLO Modell")
 

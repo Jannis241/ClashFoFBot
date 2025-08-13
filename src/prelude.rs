@@ -30,3 +30,5 @@ pub use std::sync::atomic::{AtomicBool, Ordering};
 pub use std::thread::{self};
 
 pub use std::io;
+pub use std::process::Child;
+pub use std::sync::{Arc, Mutex};

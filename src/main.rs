@@ -17,11 +17,13 @@ mod walls;
 #[derive(Clone, Debug, PartialEq)]
 pub enum FofError {
     ThreadNotInitialized,
-    NoMetricsFoundForModel(String), // Wenn man get rating callt und er keine ratings für das
+    FailedCreatingCommunication(String), // info
+    NoMetricsFoundForModel(String),      // Wenn man get rating callt und er keine ratings für das
     // angegebene modell findet
     FailedReadingDirectory(String), // Welches Dir
-    FailedReadingFile(String),      // Welches File
-    Failed(String),                 // mehr infos in dem string (kann alles mögliche sein)
+    FailedToCopyData(String),
+    FailedReadingFile(String), // Welches File
+    Failed(String),            // mehr infos in dem string (kann alles mögliche sein)
     DivisionByZero, // wenn man z.B get avg confidence aufruft aber einen leeren Vec an buildings
     ModelAlreadyExists, // wenn man ein model erstellen will, was es schon gibt
     YoloModelNotFound, // Wenn man ein invalies base model angibt und er es nicht findet.
