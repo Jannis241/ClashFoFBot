@@ -1,51 +1,86 @@
 use crate::image_data_wrapper::Building;
 use crate::prelude::*;
 
-fn center_of_box(bbox: (f32, f32, f32, f32)) -> (f32, f32) {
-    let (x_min, y_min, x_max, y_max) = bbox;
-    ((x_min + x_max) / 2.0, (y_min + y_max) / 2.0)
+type BoundingBox = (f32, f32, f32, f32);
+type Point = (f32, f32);
+
+#[derive(PartialEq, Clone)]
+struct Wall {
+    bbox: BoundingBox,
+    processed: bool,
 }
 
-fn distance(p1: (f32, f32), p2: (f32, f32)) -> f32 {
-    let dx = p2.0 - p1.0;
-    let dy = p2.1 - p1.1;
-    (dx * dx + dy * dy).sqrt()
+#[derive(PartialEq, Eq, Hash, Clone)]
+enum Direction {
+    TopRight,
+    TopLeft,
+    BottomRight,
+    BottomLeft,
 }
 
-fn calc_dist_between_walls(wall1: &Building, wall2: &Building) -> f32 {
-    let bounding_box1 = wall1.bounding_box;
-    let bounding_box2 = wall2.bounding_box;
+impl Wall {
+    fn new(bbox: BoundingBox) -> Self {
+        let processed = false;
+        Self { bbox, processed }
+    }
 
-    let center1 = center_of_box(bounding_box1);
-    let center2 = center_of_box(bounding_box2);
+    fn get_center_of_bbox(&self) -> Point {
+        let (x_min, y_min, x_max, y_max) = self.bbox;
+        ((x_min + x_max) / 2.0, (y_min + y_max) / 2.0)
+    }
+    fn distance(p1: Point, p2: Point) -> f32 {
+        let dx = p2.0 - p1.0;
+        let dy = p2.1 - p1.1;
+        (dx * dx + dy * dy).sqrt()
+    }
+    fn calc_dist_to_other(&self, other: &Wall) -> f32 {
+        let center1 = self.get_center_of_bbox();
+        let center2 = other.get_center_of_bbox();
 
-    let dist = distance(center1, center2);
-
-    return dist;
-}
-
-fn create_line_between_walls(wall1: &Building, wall2: &Building) -> ((f32, f32), (f32, f32)) {
-    let bounding_box1 = wall1.bounding_box;
-    let bounding_box2 = wall2.bounding_box;
-
-    let center1 = center_of_box(bounding_box1);
-    let center2 = center_of_box(bounding_box2);
-
-    return (center1, center2);
-}
-
-fn get_near_walls(wall: &Building, walls: &Vec<Building>, dist: f32) -> Vec<Building> {
-    let mut res = Vec::new();
-    for w in walls {
-        if w.bounding_box == wall.bounding_box {
-            continue;
-        }
-
-        if calc_dist_between_walls(w, wall) <= dist {
-            res.push(w.clone());
+        Wall::distance(center1, center2)
+    }
+    fn create_line_to_other(&self, other: &Wall) -> (Point, Point) {
+        (self.get_center_of_bbox(), other.get_center_of_bbox())
+    }
+    fn get_dir_to_other(&self, other: &Wall) -> Direction {
+        let my_center = self.get_center_of_bbox();
+        let other_center = other.get_center_of_bbox();
+        match (my_center.0 > other_center.0, other_center.1 > my_center.1) {
+            (true, true) => Direction::BottomRight,
+            (true, false) => Direction::TopRight,
+            (false, true) => Direction::BottomLeft,
+            (false, false) => Direction::BottomRight,
         }
     }
-    res
+    fn set_processed(&mut self, state: bool) {
+        self.processed = state;
+    }
+    fn get_neighbors(&self, all_walls: &Vec<Wall>, dist: f32) -> Vec<Wall> {
+        let mut neighbors: HashMap<Direction, Wall> = HashMap::new();
+        let mut distances: HashMap<Direction, f32> = HashMap::new();
+        for wall in all_walls {
+            if wall.processed || wall == self {
+                continue;
+            }
+
+            let distance = self.calc_dist_to_other(wall);
+
+            if distance <= dist {
+                // potenzielle connection
+                let direction = self.get_dir_to_other(wall);
+
+                if &distance < &distances.get(&direction).unwrap_or(&99999.0) {
+                    distances.insert(direction.clone(), distance);
+                    neighbors.insert(direction.clone(), wall.clone());
+                }
+            }
+        }
+        let mut r = Vec::new();
+        for (k, v) in neighbors {
+            r.push(v);
+        }
+        r
+    }
 }
 
 pub fn connect_walls(
@@ -58,27 +93,27 @@ pub fn connect_walls(
 
     for building in buildings.clone() {
         if building.class_name.as_str() == "mauer" {
-            walls.push(building);
+            let wall = Wall::new(building.bounding_box);
+            walls.push(wall);
         } else {
             buildings_without_walls.push(building);
         }
     }
 
-    for (i, wall) in walls.iter().enumerate() {
-        for (j, near_wall) in walls.iter().enumerate() {
-            if i == j {
-                continue;
-            }
-
-            if j <= i {
-                continue;
-            }
-
-            if calc_dist_between_walls(wall, near_wall) <= min_dist_to_connect {
-                let line = create_line_between_walls(wall, near_wall);
-                wall_lines.push(line);
-            }
+    for mut wall in walls.clone() {
+        let neighbors = wall.get_neighbors(&walls, min_dist_to_connect);
+        if neighbors.len() == 0 {
+            // wall ist alleine
+            // todo: so machen dass die line nicht den selben start und endpunkt hat sondern
+            // bisschen fetter ist
+            let line = wall.create_line_to_other(&Wall::new(wall.bbox));
+            wall_lines.push(line);
         }
+        for neighbor_wall in neighbors {
+            let line = wall.create_line_to_other(&neighbor_wall);
+            wall_lines.push(line);
+        }
+        wall.set_processed(true);
     }
 
     (buildings_without_walls, wall_lines)
