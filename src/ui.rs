@@ -9,7 +9,7 @@ use eframe::{
         Key::{self, *},
         Pos2, Slider, Vec2,
     },
-    glow::LEFT,
+    glow::{LEFT, NOR},
 };
 use egui::Rect;
 
@@ -1437,10 +1437,10 @@ impl ScreenshotApp {
 
             if let Err(e) = buildings.clone() {
                 if e == FofError::ThreadNotInitialized {
-                    self.create_error(
-                        "Thread um Buildings zu bekommen ist noch nicht inizialisiert",
-                        MessageType::Warning,
-                    );
+                    // self.create_error(
+                    //     "Thread um Buildings zu bekommen ist noch nicht inizialisiert",
+                    //     MessageType::Warning,
+                    // );
                 } else {
                     self.create_error(
                         format!("Konnte Buildings nicht bekommen: {:?}", e),
@@ -1467,10 +1467,10 @@ impl ScreenshotApp {
 
             if let Err(e) = buildings.clone() {
                 if e == FofError::ThreadNotInitialized {
-                    self.create_error(
-                        "Thread um Buildings zu bekommen ist noch nicht inizialisiert",
-                        MessageType::Warning,
-                    );
+                    // self.create_error(
+                    //     "Thread um Buildings zu bekommen ist noch nicht inizialisiert",
+                    //     MessageType::Warning,
+                    // );
                 } else {
                     self.create_error(
                         format!("Konnte Buildings nicht bekommen: {:?}", e),
@@ -1583,7 +1583,12 @@ impl ScreenshotApp {
                                 )
                                 .clicked()
                             {
-                                if dataset_type == image_data_wrapper::DatasetType::Buildings {
+                                if Some(name.clone()) == self.selected_build_model {
+                                    self.selected_build_model = None;
+                                } else if Some(name.clone()) == self.selected_lvls_model {
+                                    self.selected_lvls_model = None;
+                                } else if dataset_type == image_data_wrapper::DatasetType::Buildings
+                                {
                                     self.selected_build_model = Some(name);
                                 } else if dataset_type == image_data_wrapper::DatasetType::Level {
                                     self.selected_lvls_model = Some(name);
@@ -1596,64 +1601,10 @@ impl ScreenshotApp {
 
             if !self.in_test_mode {
                 if let Some(img) = self.selected_image.clone() {
-                    let mut models = vec![];
-
-                    if let Some(mdl) = &self.selected_build_model {
-                        models.push(mdl);
-                    }
-                    if let Some(mdl) = &self.selected_lvls_model {
-                        models.push(mdl);
-                    }
-
-                    if !models.is_empty() {
+                    if self.selected_lvls_model.is_some() || self.selected_build_model.is_some() {
                         if ui.button("Show Test").clicked() {
-                            self.current_buildings_lvls = None;
-                            self.current_buildings_build = None;
-                            self.current_avg_conf_lvls = None;
-                            self.current_avg_conf_build = None;
+                            self.start_getting_builds(img);
                             self.in_test_mode = true;
-
-                            for (idx, mdl) in models.iter().enumerate() {
-                                if idx == 0 {
-                                    self.get_building_thread_lvls.set_field(
-                                        "buildings",
-                                        Err::<Vec<image_data_wrapper::Building>, FofError>(
-                                            FofError::ThreadNotInitialized,
-                                        ),
-                                    );
-                                    self.get_building_thread_lvls
-                                        .set_field("model_name", mdl.to_string());
-                                    self.get_building_thread_lvls
-                                        .set_field("path_to_image", img.to_string());
-                                    self.get_building_thread_lvls
-                                        .set_field("should_get_prediction", true);
-                                    self.get_building_thread_lvls.poll_field::<Result<
-                                        Vec<image_data_wrapper::Building>,
-                                        FofError,
-                                    >>(
-                                        "buildings"
-                                    );
-                                } else {
-                                    self.get_building_thread_build.set_field(
-                                        "buildings",
-                                        Err::<Vec<image_data_wrapper::Building>, FofError>(
-                                            FofError::ThreadNotInitialized,
-                                        ),
-                                    );
-                                    self.get_building_thread_build
-                                        .set_field("model_name", mdl.to_string());
-                                    self.get_building_thread_build
-                                        .set_field("path_to_image", img.to_string());
-                                    self.get_building_thread_build
-                                        .set_field("should_get_prediction", true);
-                                    self.get_building_thread_build.poll_field::<Result<
-                                        Vec<image_data_wrapper::Building>,
-                                        FofError,
-                                    >>(
-                                        "buildings"
-                                    );
-                                }
-                            }
                         }
                     }
                 }
@@ -1817,12 +1768,6 @@ impl ScreenshotApp {
                 });
 
                 ui.separator();
-                ui.add_sized(
-                    vec2(300., 50.),
-                    Slider::new(&mut self.min_confidence, 0.001..=1.0)
-                        .step_by(0.01)
-                        .text("Min Conf:"),
-                );
 
                 // Now overlay the lines
                 let slider_range = 0.001..=1.0;
@@ -3120,11 +3065,17 @@ impl ScreenshotApp {
                                 )
                                 .clicked()
                             {
-                                if dataset_type == image_data_wrapper::DatasetType::Buildings {
+                                if Some(name.clone()) == self.selected_build_model {
+                                    self.selected_build_model = None;
+                                } else if Some(name.clone()) == self.selected_lvls_model {
+                                    self.selected_lvls_model = None;
+                                } else if dataset_type == image_data_wrapper::DatasetType::Buildings
+                                {
                                     self.selected_build_model = Some(name);
                                 } else if dataset_type == image_data_wrapper::DatasetType::Level {
                                     self.selected_lvls_model = Some(name);
                                 }
+
                                 self.create_error("Model geändert", MessageType::Success);
                             }
                         }
@@ -3191,53 +3142,92 @@ impl ScreenshotApp {
         }
     }
 
+    fn start_getting_builds(&mut self, img: String) {
+        if let Some(mdl) = &self.selected_build_model {
+            self.current_avg_conf_build = None;
+            self.current_buildings_build = None;
+            self.get_building_thread_build.set_field(
+                "buildings",
+                Err::<Vec<image_data_wrapper::Building>, FofError>(FofError::ThreadNotInitialized),
+            );
+            self.get_building_thread_build
+                .set_field("model_name", mdl.to_string());
+            self.get_building_thread_build
+                .set_field("path_to_image", img.to_string());
+            self.get_building_thread_build
+                .set_field("should_get_prediction", true);
+            self.get_building_thread_build
+                .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>("buildings");
+        }
+        if let Some(mdl) = &self.selected_lvls_model {
+            self.current_buildings_lvls = None;
+
+            self.current_avg_conf_lvls = None;
+            self.get_building_thread_lvls.set_field(
+                "buildings",
+                Err::<Vec<image_data_wrapper::Building>, FofError>(FofError::ThreadNotInitialized),
+            );
+            self.get_building_thread_lvls
+                .set_field("model_name", mdl.to_string());
+            self.get_building_thread_lvls
+                .set_field("path_to_image", img.to_string());
+            self.get_building_thread_lvls
+                .set_field("should_get_prediction", true);
+            self.get_building_thread_lvls
+                .poll_field::<Result<Vec<image_data_wrapper::Building>, FofError>>("buildings");
+        }
+    }
+
     fn ja_nein(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         self.update_buildings();
 
-        let combined_buildings;
+        if let Some(selected) = self.labeling_que.last() {
+            let combined_buildings;
 
-        let bb = self.selected_build_model.is_none();
-        let bl = self.selected_lvls_model.is_none();
+            let bb = self.selected_build_model.is_none();
+            let bl = self.selected_lvls_model.is_none();
 
-        if bl && bb {
-            return;
-        } else if bl && !bb {
-            if let Some(bldngs) = self.current_buildings_build.clone() {
-                combined_buildings = bldngs;
-            } else {
-                return;
-            }
-        } else if !bl && bb {
-            if let Some(bldngs) = self.current_buildings_lvls.clone() {
-                combined_buildings = bldngs;
-            } else {
-                return;
-            }
-        } else if !bl && !bb {
-            if let Some(bldngsb) = self.current_buildings_build.clone() {
-                if let Some(bldngsl) = self.current_buildings_build.clone() {
-                    combined_buildings = filter_buildings::connect_level_and_buildings(
-                        &bldngsb,
-                        &bldngsl,
-                        self.min_iou,
-                    );
-                    ui.add_sized(
-                        vec2(300., 50.),
-                        egui::Slider::new(&mut self.min_dist_to_connect, 0.001..=1.0)
-                            .step_by(0.001)
-                            .text("min iou"),
-                    );
+            if bl && bb {
+                unreachable!()
+            } else if bl && !bb {
+                if let Some(bldngs) = self.current_buildings_build.clone() {
+                    combined_buildings = bldngs;
                 } else {
+                    self.start_getting_builds(selected.to_string());
+                    return;
+                }
+            } else if !bl && bb {
+                if let Some(bldngs) = self.current_buildings_lvls.clone() {
+                    combined_buildings = bldngs;
+                } else {
+                    self.start_getting_builds(selected.to_string());
+                    return;
+                }
+            } else if !bl && !bb {
+                if let Some(bldngsb) = self.current_buildings_build.clone() {
+                    if let Some(bldngsl) = self.current_buildings_build.clone() {
+                        combined_buildings = filter_buildings::connect_level_and_buildings(
+                            &bldngsb,
+                            &bldngsl,
+                            self.min_iou,
+                        );
+                        ui.add_sized(
+                            vec2(300., 50.),
+                            egui::Slider::new(&mut self.min_dist_to_connect, 0.001..=1.0)
+                                .step_by(0.001)
+                                .text("min iou"),
+                        );
+                    } else {
+                        self.start_getting_builds(selected.to_string());
+                        return;
+                    }
+                } else {
+                    self.start_getting_builds(selected.to_string());
                     return;
                 }
             } else {
-                return;
+                unreachable!()
             }
-        } else {
-            unreachable!()
-        }
-
-        if let Some(selected) = self.labeling_que.last() {
             self.update_image_texture(ctx, selected.to_string());
 
             if let Some(texture) = &self.image_texture {
