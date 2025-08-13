@@ -22,3 +22,4 @@ regex = "1.11.1"
 time = "0.3.41"
 anyhow = "1.0"
 uuid = { version = "1.3", features = ["v4"] }
+egui_extras = "0.32.0"

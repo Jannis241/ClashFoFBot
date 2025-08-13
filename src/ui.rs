@@ -3277,6 +3277,35 @@ impl ScreenshotApp {
             ui.label("Kein Bild ausgewählt.");
         }
     }
+
+    fn model_übersicht(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        use egui_extras::{Column, TableBuilder};
+
+        TableBuilder::new(ui)
+            .striped(true) // alternating row colors
+            .column(Column::auto()) // first column auto width
+            .column(Column::remainder()) // takes remaining space
+            .header(20.0, |mut header| {
+                header.col(|ui| {
+                    ui.label("Name");
+                });
+                header.col(|ui| {
+                    ui.label("Age");
+                });
+            })
+            .body(|mut body| {
+                for (name, age) in [("Alice", 32), ("Bob", 28), ("Charlie", 41)] {
+                    body.row(20.0, |mut row| {
+                        row.col(|ui| {
+                            ui.label(name);
+                        });
+                        row.col(|ui| {
+                            ui.label(age.to_string());
+                        });
+                    });
+                }
+            });
+    }
 }
 
 impl eframe::App for ScreenshotApp {
