@@ -309,6 +309,7 @@ where
         ))
     })?;
 
+    dbg!("Starte jetzt python");
     let args = vec!["src/image_data.py", "--predict", "--model-name", model_name];
     let python_output = start_python(args)?;
 

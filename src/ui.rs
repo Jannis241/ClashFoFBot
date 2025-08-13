@@ -1423,6 +1423,10 @@ impl ScreenshotApp {
     }
 
     fn update_buildings(&mut self) {
+        dbg!(
+            self.current_buildings_build.clone().map(|l| l.len()),
+            self.current_buildings_lvls.clone().map(|l| l.len())
+        );
         if self.current_buildings_build.is_none() {
             let buildings_res = self
                 .get_building_thread_build
@@ -1667,15 +1671,19 @@ impl ScreenshotApp {
                                 } else {
                                     self.wall_connections.clear();
                                 }
-                                if self.combine_models_enabled {
-                                    if let Some(level) = &self.current_buildings_lvls {
+                                if let Some(level) = &self.current_buildings_lvls {
+                                    if self.combine_models_enabled {
                                         buildings_to_draw =
                                             filter_buildings::connect_level_and_buildings(
                                                 &buildings_to_draw,
                                                 level,
                                                 self.min_iou,
                                             )
+                                    } else {
+                                        buildings_to_draw.append(&mut level.to_vec());
                                     }
+                                    buildings_to_draw
+                                        .retain(|b| b.confidence >= self.min_confidence);
                                 }
 
                                 // Finally draw overlays
@@ -1693,6 +1701,30 @@ impl ScreenshotApp {
                     });
                 });
 
+            if self.in_test_mode != modeclone {
+                self.current_buildings_lvls = None;
+                self.current_buildings_build = None;
+                self.get_building_thread_lvls.set_field(
+                    "buildings",
+                    Err::<Vec<image_data_wrapper::Building>, FofError>(
+                        FofError::ThreadNotInitialized,
+                    ),
+                );
+                self.get_building_thread_lvls
+                    .set_field("path_to_image", "".to_string());
+                self.get_building_thread_lvls
+                    .set_field("model_name", "".to_string());
+                self.get_building_thread_build.set_field(
+                    "buildings",
+                    Err::<Vec<image_data_wrapper::Building>, FofError>(
+                        FofError::ThreadNotInitialized,
+                    ),
+                );
+                self.get_building_thread_build
+                    .set_field("path_to_image", "".to_string());
+                self.get_building_thread_build
+                    .set_field("model_name", "".to_string());
+            }
             self.in_test_mode = modeclone;
 
             if let Some(selected) = &self.selected_image {
@@ -1746,7 +1778,7 @@ impl ScreenshotApp {
                     if self.combine_models_enabled {
                         ui.add_sized(
                             vec2(300., 50.),
-                            egui::Slider::new(&mut self.min_dist_to_connect, 0.001..=1.0)
+                            egui::Slider::new(&mut self.min_iou, 0.001..=1000.0)
                                 .step_by(0.001)
                                 .text("min iou"),
                         );
@@ -1884,7 +1916,7 @@ impl ScreenshotApp {
             } else if is_normal {
                 egui::Color32::from_rgb(40, 140, 220)
             } else {
-                unreachable!()
+                egui::Color32::from_rgb(80, 240, 120)
             };
 
             painter.rect_stroke(
@@ -2818,7 +2850,6 @@ impl ScreenshotApp {
                 self.create_error("Session beendet", MessageType::Success);
                 self.current_labeling_mode = None;
                 self.rauthaus_das_man_gerade_labeled = LabelRathaus::Gemischt;
-                self.selected_model = None;
                 self.current_buildings_build = None;
                 self.current_buildings_lvls = None;
                 self.get_building_thread_lvls.set_field(
@@ -2842,6 +2873,28 @@ impl ScreenshotApp {
                 self.get_building_thread_build
                     .set_field("model_name", "".to_string());
             } else {
+                self.current_buildings_build = None;
+                self.current_buildings_lvls = None;
+                self.get_building_thread_lvls.set_field(
+                    "buildings",
+                    Err::<Vec<image_data_wrapper::Building>, FofError>(
+                        FofError::ThreadNotInitialized,
+                    ),
+                );
+                self.get_building_thread_lvls
+                    .set_field("path_to_image", "".to_string());
+                self.get_building_thread_lvls
+                    .set_field("model_name", "".to_string());
+                self.get_building_thread_build.set_field(
+                    "buildings",
+                    Err::<Vec<image_data_wrapper::Building>, FofError>(
+                        FofError::ThreadNotInitialized,
+                    ),
+                );
+                self.get_building_thread_build
+                    .set_field("path_to_image", "".to_string());
+                self.get_building_thread_build
+                    .set_field("model_name", "".to_string());
                 self.labeling_que = self.selected_images.iter().cloned().collect();
                 self.create_error("Session gestartet", MessageType::Success);
             }
@@ -3157,7 +3210,6 @@ impl ScreenshotApp {
         }
         if let Some(mdl) = &self.selected_lvls_model {
             self.current_buildings_lvls = None;
-
             self.current_avg_conf_lvls = None;
             self.get_building_thread_lvls.set_field(
                 "buildings",
@@ -3209,7 +3261,7 @@ impl ScreenshotApp {
                         );
                         ui.add_sized(
                             vec2(300., 50.),
-                            egui::Slider::new(&mut self.min_dist_to_connect, 0.001..=1.0)
+                            egui::Slider::new(&mut self.min_iou, 0.001..=1.0)
                                 .step_by(0.001)
                                 .text("min iou"),
                         );

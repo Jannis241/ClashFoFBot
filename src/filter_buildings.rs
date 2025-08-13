@@ -1,3 +1,5 @@
+use std::usize;
+
 use crate::{image_data_wrapper::Building, prelude::*};
 
 fn get_similarity(bbox1: (f32, f32, f32, f32), bbox2: (f32, f32, f32, f32)) -> f32 {
@@ -41,6 +43,7 @@ pub fn connect_level_and_buildings(
     for building in buildings {
         for lvl in level {
             let iou = get_similarity(building.bounding_box, lvl.bounding_box);
+            dbg!(iou);
             if iou >= min_iou {
                 let avg_bbox = average_bbox(building.bounding_box, lvl.bounding_box);
 
@@ -113,15 +116,16 @@ pub fn get_building_type(building: &Building) -> (bool, bool, bool) {
     ];
     let is_wall = building.class_name == "mauer";
     let is_defence = defences.contains(&building.class_name);
+    let is_normal = !is_wall && !is_defence && building.class_name.parse::<usize>().is_err();
 
     if is_wall {
         (true, false, false)
     } else if is_defence {
         (false, true, false)
-    } else if !is_wall && !is_defence {
+    } else if is_normal {
         (false, false, true)
     } else {
-        unreachable!()
+        (false, false, false)
     }
 }
 
