@@ -1668,6 +1668,7 @@ impl ScreenshotApp {
                                         crate::walls::connect_walls(
                                             &buildings_to_draw,
                                             self.min_dist_to_connect,
+                                            self.angle_variance,
                                         );
                                     self.wall_connections = connections;
                                 } else {
