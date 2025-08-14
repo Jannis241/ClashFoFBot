@@ -44,6 +44,7 @@ enum Tab {
     Settings,
     YoloLabel,
     Model,
+    ModelUebersicht,
     Split,
 }
 
@@ -968,6 +969,12 @@ impl ScreenshotApp {
                 .clicked()
             {
                 self.active_tab = Tab::Model;
+            }
+            if ui
+                .selectable_label(self.active_tab == Tab::ModelUebersicht, "|Model Übersicht|")
+                .clicked()
+            {
+                self.active_tab = Tab::ModelUebersicht;
             }
             if ui
                 .selectable_label(self.active_tab == Tab::Split, "|Split|")
@@ -3340,32 +3347,50 @@ impl ScreenshotApp {
     }
 
     fn model_übersicht(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        use egui_extras::{Column, TableBuilder};
+        ui.collapsing("FOF", |ui| {
+            ui.collapsing("FOF", |ui| {
+                ui.collapsing("FOF", |ui| {
+                    ui.collapsing("FOF", |ui| {
+                        ui.collapsing("FOF", |ui| {
+                            ui.collapsing("FOF", |ui| {
+                                ui.collapsing("FOF", |ui| {
+                                    ui.collapsing("FOF", |ui| {
+                                        ui.collapsing("FOF", |ui| {
+                                            ui.collapsing("FOF", |ui| {
+                                                ui.collapsing("FOF", |ui| {
+                                                    ui.collapsing("FOF", |ui| {
+                                                        ui.collapsing("FOF", |ui| {
+                                                            ui.collapsing("FOF", |ui| {
+                                                                ui.collapsing("FOF", |ui| {
+                                                                    ui.collapsing("FOF", |ui| {
+                                                                        ui.collapsing("FOF", |ui| {
+        ui.collapsing("FOF", |ui| {
+                                        if ui.button("Den FINALEN FOF Finden??").clicked() {
+                                            self.create_error(
+                                                "DU HAST DEN FINALEN FOF GEFUNDEN",
+                                                MessageType::Success,
+                                            );
+                                        }
 
-        TableBuilder::new(ui)
-            .striped(true) // alternating row colors
-            .column(Column::auto()) // first column auto width
-            .column(Column::remainder()) // takes remaining space
-            .header(20.0, |mut header| {
-                header.col(|ui| {
-                    ui.label("Name");
-                });
-                header.col(|ui| {
-                    ui.label("Age");
-                });
-            })
-            .body(|mut body| {
-                for (name, age) in [("Alice", 32), ("Bob", 28), ("Charlie", 41)] {
-                    body.row(20.0, |mut row| {
-                        row.col(|ui| {
-                            ui.label(name);
-                        });
-                        row.col(|ui| {
-                            ui.label(age.to_string());
+        });
+
+        });
+                                                                    });
+                                                                });
+                                                            });
+                                                        });
+                                                    });
+                                                });
+                                            });
+                                        });
+                                    });
+                                });
+                            });
                         });
                     });
-                }
+                });
             });
+        });
     }
 }
 
@@ -3385,6 +3410,9 @@ impl eframe::App for ScreenshotApp {
                 }
                 Tab::Model => {
                     self.model(ui, ctx);
+                }
+                Tab::ModelUebersicht => {
+                    self.model_übersicht(ui, ctx);
                 }
                 Tab::YoloLabel => {
                     self.yolo_label(ui, ctx);
