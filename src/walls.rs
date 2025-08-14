@@ -168,11 +168,11 @@ pub fn connect_walls(
 
 // ----------------------- chat gpt kocht??????????? -------------------------------------------
 
-fn center_x(bbox: (f32, f32, f32, f32)) -> f32 {
+pub fn center_x(bbox: (f32, f32, f32, f32)) -> f32 {
     (bbox.0 + bbox.2) / 2.0
 }
 
-fn center_y(bbox: (f32, f32, f32, f32)) -> f32 {
+pub fn center_y(bbox: (f32, f32, f32, f32)) -> f32 {
     (bbox.1 + bbox.3) / 2.0
 }
 
@@ -181,15 +181,23 @@ fn bbox_width(bbox: (f32, f32, f32, f32)) -> f32 {
 }
 
 /// Gruppiert Mauern in Reihen anhand ähnlicher Y-Koordinate
-fn group_walls_by_row(walls: &[Building], y_threshold: f32) -> Vec<Vec<Building>> {
+pub fn group_walls_by_row(walls: &[Building], threshold45deg: f32) -> Vec<Vec<Building>> {
     let mut rows: Vec<Vec<Building>> = Vec::new();
 
     'outer: for wall in walls.iter() {
         let cy = center_y(wall.bounding_box);
+        let cx = center_x(wall.bounding_box);
+
         for row in rows.iter_mut() {
             // Prüfe die y-Differenz zur ersten Mauer in der Reihe
             let row_cy = center_y(row[0].bounding_box);
-            if (cy - row_cy).abs() <= y_threshold {
+            let row_cx = center_x(row[0].bounding_box);
+            let diff_y = (cy - row_cy).abs();
+            let diff_x = (cx - row_cx).abs();
+
+            let angle = (diff_x.atan2(diff_y).to_degrees() + 360.) % 90.;
+
+            if angle - 25. <= threshold45deg || angle - 75. <= threshold45deg {
                 row.push(wall.clone());
                 continue 'outer;
             }
@@ -271,11 +279,14 @@ fn bbox_for_hidden_wall(
     (center_x - half_width, y_min, center_x + half_width, y_max)
 }
 
-pub fn find_hidden_walls(buildings: &Vec<Building>) -> Vec<Building> {
+pub fn find_hidden_walls(
+    buildings: &Vec<Building>,
+    threshold45deg: f32, // wie nah müssen Mauern in y sein, um in einer Reihe zu sein
+    max_gap: f32,        // max Abstand zwischen Mauern, um Lücke als potenzielle Mauer zu sehen
+    building_y_threshold: f32, // max vertikaler Abstand Gebäude unter Mauerreihe
+) -> Vec<Building> {
     // Parameter:
-    let y_threshold = 10.0; // wie nah müssen Mauern in y sein, um in einer Reihe zu sein
-    let max_gap = 15.0; // max Abstand zwischen Mauern, um Lücke als potenzielle Mauer zu sehen
-    let building_y_threshold = 20.0; // max vertikaler Abstand Gebäude unter Mauerreihe
+
     let default_wall_confidence = 0.7; // Confidence für vermutete Mauern
 
     // 1. Mauern und andere Gebäude trennen
@@ -296,7 +307,7 @@ pub fn find_hidden_walls(buildings: &Vec<Building>) -> Vec<Building> {
     }
 
     // 2. Gruppiere Mauern in Reihen nach y
-    let rows = group_walls_by_row(&walls, y_threshold);
+    let rows = group_walls_by_row(&walls, threshold45deg);
 
     // Wir nehmen die durchschnittliche Breite einer Mauer als Standard-Breite
     let avg_wall_width = walls

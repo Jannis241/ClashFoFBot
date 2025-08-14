@@ -282,6 +282,9 @@ pub struct ScreenshotApp {
     pub find_hidden_walls_enabled: bool, // default false
     pub combine_models_enabled: bool,    // no-op for now
     pub show_img: bool,
+    threshold45deg: f32, // wie nah müssen Mauern in y sein, um in einer Reihe zu sein
+    max_gap: f32,        // max Abstand zwischen Mauern, um Lücke als potenzielle Mauer zu sehen
+    building_y_threshold: f32, // max vertikaler Abstand Gebäude unter Mauerreihe
 
     selected_build_model: Option<String>,
     selected_lvls_model: Option<String>,
@@ -539,7 +542,9 @@ impl Default for ScreenshotApp {
     fn default() -> Self {
         let mut s = Self {
             min_confidence: 0.25,
-
+            threshold45deg: 10.0, // wie nah müssen Mauern in y sein, um in einer Reihe zu sein
+            max_gap: 15.0, // max Abstand zwischen Mauern, um Lücke als potenzielle Mauer zu sehen
+            building_y_threshold: 20.0, // max vertikaler Abstand Gebäude unter Mauerreihe
             show_walls: true,
             show_normal_buildings: true,
             show_defences: true,
@@ -1510,15 +1515,51 @@ impl ScreenshotApp {
             );
 
             // 2) apply confidence threshold
+
             filtered.retain(|b| b.confidence >= self.min_confidence);
 
             // 3) optionally find hidden walls (append results)
             if self.find_hidden_walls_enabled {
                 // call external function; it returns newly found wall Building instances (in pixel coords)
-                let hidden = crate::walls::find_hidden_walls(&filtered);
+                let hidden = crate::walls::find_hidden_walls(
+                    &bldngs,
+                    self.threshold45deg,
+                    self.max_gap,
+                    self.building_y_threshold,
+                );
                 // append (you may want dedup logic; naive append for now)
                 filtered.extend(hidden.into_iter());
             }
+
+            //HACK ALARM STOOOOOOOOOOOOOOOP
+
+            // if self.connect_walls_enabled {
+            //     let mut wall_buildings =
+            //         crate::filter_buildings::apply_filter(&bldngs, false, true, false);
+            //     wall_buildings.retain(|b| b.confidence >= self.min_confidence);
+            //     let rows = walls::group_walls_by_row(&wall_buildings, self.threshold45deg);
+            //
+            //     self.wall_connections.clear();
+            //
+            //     for row in rows {
+            //         if row.len() == 0 {
+            //             continue;
+            //         }
+            //         let start = row.first().unwrap();
+            //         let end = row.last().unwrap();
+            //
+            //         self.wall_connections.push((
+            //             (
+            //                 walls::center_x(start.bounding_box),
+            //                 walls::center_y(start.bounding_box),
+            //             ),
+            //             (
+            //                 walls::center_x(end.bounding_box),
+            //                 walls::center_y(end.bounding_box),
+            //             ),
+            //         ));
+            //     }
+            // }
 
             // 4) If connect_walls is enabled we don't mutate here — we just return the filtered set.
             //    wall connections (line segments) will be computed by the caller (frame code) and stored
@@ -1771,6 +1812,26 @@ impl ScreenshotApp {
                 ui.separator();
 
                 ui.checkbox(&mut self.find_hidden_walls_enabled, "Find hidden walls");
+                if self.find_hidden_walls_enabled {
+                    ui.add_sized(
+                        vec2(300., 50.),
+                        egui::Slider::new(&mut self.threshold45deg, 1.0..=30.0)
+                            .step_by(0.5)
+                            .text("45 Degree Threshold"),
+                    );
+                    ui.add_sized(
+                        vec2(300., 50.),
+                        egui::Slider::new(&mut self.max_gap, 1.0..=100.0)
+                            .step_by(0.5)
+                            .text("Max Gap"),
+                    );
+                    ui.add_sized(
+                        vec2(300., 50.),
+                        egui::Slider::new(&mut self.building_y_threshold, 1.0..=100.0)
+                            .step_by(0.5)
+                            .text("Building Y Threshold"),
+                    );
+                }
                 ui.checkbox(&mut self.connect_walls_enabled, "Connect walls");
                 if self.connect_walls_enabled {
                     ui.add_sized(
