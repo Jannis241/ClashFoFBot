@@ -8,7 +8,3 @@ jesko:
 -(model übersicht machen)
 
 
-jannis:
-- linien verbinden
-- filter confidence funktion
-
