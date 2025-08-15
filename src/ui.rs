@@ -275,6 +275,7 @@ pub struct ScreenshotApp {
     pub show_walls: bool,            // default true
     pub show_normal_buildings: bool, // default true
     pub show_defences: bool,         // default true
+    pub show_lvl: bool,
     pub connect_walls_enabled: bool, // default false
     pub min_dist_to_connect: f32,    // default 32.0
     pub min_iou: f32,
@@ -548,6 +549,7 @@ impl Default for ScreenshotApp {
             show_walls: true,
             show_normal_buildings: true,
             show_defences: true,
+            show_lvl: true,
             connect_walls_enabled: false,
             min_dist_to_connect: 32.0,
             min_iou: 10.,
@@ -1809,6 +1811,10 @@ impl ScreenshotApp {
                 ui.checkbox(&mut self.show_walls, "Walls");
                 ui.checkbox(&mut self.show_defences, "Defences");
 
+                if self.current_buildings_lvls.is_some() {
+                    ui.checkbox(&mut self.show_lvl, "Level");
+                }
+
                 ui.separator();
 
                 ui.checkbox(&mut self.find_hidden_walls_enabled, "Find hidden walls");
@@ -1993,6 +1999,9 @@ impl ScreenshotApp {
             } else if is_normal {
                 egui::Color32::from_rgb(40, 140, 220)
             } else {
+                if !self.show_lvl {
+                    continue;
+                }
                 egui::Color32::from_rgb(80, 240, 120)
             };
 
