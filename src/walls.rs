@@ -135,7 +135,7 @@ pub fn connect_walls(
 
     // Mauern von normalen Gebäuden trennen
     for building in buildings.iter().cloned() {
-        if building.class_name.as_str() == "mauer" {
+        if building.class_name.as_str().contains("mauer") {
             walls.push(Wall::new(building.bounding_box));
         } else {
             buildings_without_walls.push(building);

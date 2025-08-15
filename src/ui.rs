@@ -1709,6 +1709,20 @@ impl ScreenshotApp {
                                 self.update_buildings();
                                 let mut buildings_to_draw = self.recompute_buildings();
 
+                                if let Some(level) = &self.current_buildings_lvls {
+                                    if self.combine_models_enabled {
+                                        buildings_to_draw =
+                                            filter_buildings::connect_level_and_buildings(
+                                                &buildings_to_draw,
+                                                level,
+                                                self.min_iou,
+                                            )
+                                    } else {
+                                        buildings_to_draw.append(&mut level.to_vec());
+                                        buildings_to_draw
+                                            .retain(|b| b.confidence >= self.min_confidence);
+                                    }
+                                }
                                 // Update wall connections each frame if enabled (we mutate self here)
                                 if self.connect_walls_enabled {
                                     // connect_walls returns (Vec<Building>, Vec<((f32,f32),(f32,f32))>)
@@ -1721,20 +1735,6 @@ impl ScreenshotApp {
                                     self.wall_connections = connections;
                                 } else {
                                     self.wall_connections.clear();
-                                }
-                                if let Some(level) = &self.current_buildings_lvls {
-                                    if self.combine_models_enabled {
-                                        buildings_to_draw =
-                                            filter_buildings::connect_level_and_buildings(
-                                                &buildings_to_draw,
-                                                level,
-                                                self.min_iou,
-                                            )
-                                    } else {
-                                        buildings_to_draw.append(&mut level.to_vec());
-                                    }
-                                    buildings_to_draw
-                                        .retain(|b| b.confidence >= self.min_confidence);
                                 }
 
                                 // Finally draw overlays
@@ -1855,7 +1855,7 @@ impl ScreenshotApp {
                     if self.combine_models_enabled {
                         ui.add_sized(
                             vec2(300., 50.),
-                            egui::Slider::new(&mut self.min_iou, 0.001..=1000.0)
+                            egui::Slider::new(&mut self.min_iou, 0.001..=1.0)
                                 .step_by(0.001)
                                 .text("Max IOU"),
                         );

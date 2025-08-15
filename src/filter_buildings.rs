@@ -43,7 +43,6 @@ pub fn connect_level_and_buildings(
     for building in buildings {
         for lvl in level {
             let iou = get_similarity(building.bounding_box, lvl.bounding_box);
-            dbg!(iou);
             if iou >= min_iou {
                 let avg_bbox = average_bbox(building.bounding_box, lvl.bounding_box);
 
@@ -56,15 +55,17 @@ pub fn connect_level_and_buildings(
                 if !seen.contains(&key) {
                     seen.insert(key);
                     result.push(Building {
-                        class_id: -1,
+                        class_id: building.class_id,
                         class_name: format!("{}{}", building.class_name, lvl.class_name),
-                        confidence: -6.969696900069696969696,
+                        confidence: (building.confidence + lvl.confidence) / 2.,
                         bounding_box: avg_bbox,
                     });
                 }
             }
         }
     }
+
+    dbg!(result.len());
 
     result
 }
@@ -114,8 +115,10 @@ pub fn get_building_type(building: &Building) -> (bool, bool, bool) {
         "fegerOL".to_string(),
         "entwicklungsturmbogenschützenturm".to_string(),
     ];
-    let is_wall = building.class_name == "mauer";
-    let is_defence = defences.contains(&building.class_name);
+    let is_wall = building.class_name.contains("mauer");
+    let is_defence = defences
+        .iter()
+        .any(|name| building.class_name.contains(name));
     let is_normal = !is_wall && !is_defence && building.class_name.parse::<usize>().is_err();
 
     if is_wall {
