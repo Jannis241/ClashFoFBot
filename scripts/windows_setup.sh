@@ -18,6 +18,12 @@ venv\\Scripts\\activate.bat
 # 4. Pip aktualisieren (optional, aber empfohlen)
 pip install --upgrade pip
 
+
+# 4.5 torch neu installieren für gpu (am ende des linkes cuda version hinzufügen (12.6 = 126 | 12.8 = 128 ...)
+pip uninstall torch torchvision torchaudio -y
+# alt geharadcodet pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+python pytorchgpuinstaller
+
 # 5. Abhängigkeiten installieren
 if [ -f "requirements.txt" ]; then
     echo "Installiere Pakete aus requirements.txt..."
