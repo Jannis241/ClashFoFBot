@@ -26,6 +26,7 @@ def train_model(model_name, data_set_type, epochen):
     else:
         DATA_YAML = "dataset_level/data.yaml"
 
+
     model.train(
     data=DATA_YAML,
     epochs=epochen,

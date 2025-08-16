@@ -41,10 +41,10 @@ impl ToString for DatasetType {
     fn to_string(&self) -> String {
         match self {
             DatasetType::Buildings => {
-                return "Buildings".to_string();
+                return "buildings".to_string();
             }
             DatasetType::Level => {
-                return "Level".to_string();
+                return "level".to_string();
             }
         }
     }
@@ -167,8 +167,6 @@ pub fn get_testvals(model_name: String) -> Result<(), FofError> {
     ];
     let python_output = start_python(args)?;
 
-    println!("Python output: {}", python_output);
-
     Ok(())
 }
 
@@ -239,7 +237,6 @@ pub fn create_model(
     ];
 
     let python_output = start_python(args);
-    println!("Python output: {:?}", python_output);
 
     return Ok(());
 }
