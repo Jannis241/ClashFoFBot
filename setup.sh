@@ -1,34 +1,22 @@
+#!/usr/bin/env bash
 
-#!/bin/bash
+OS_TYPE="$(uname -s)"
 
-# 1. Venv-Ordner definieren
-VENV_DIR="venv"
-
-# 2. Venv erstellen (wenn noch nicht vorhanden)
-if [ ! -d "$VENV_DIR" ]; then
-    echo "Erstelle virtuelles Environment im Ordner '$VENV_DIR'..."
-    python3 -m venv $VENV_DIR
-else
-    echo "Virtuelles Environment existiert bereits."
-fi
-
-# 3. Venv aktivieren (für Bash und Zsh)
-source "$VENV_DIR/bin/activate"
-
-# 4. Pip aktualisieren (optional, aber empfohlen)
-pip install --upgrade pip
-
-# 5. Abhängigkeiten installieren
-if [ -f "requirements.txt" ]; then
-    echo "Installiere Pakete aus requirements.txt..."
-    pip install -r requirements.txt
-else
-    echo "requirements.txt nicht gefunden!"
-fi
-
-pip3 install -r requirements.txt
-
-# Todo: diese python ding da für nummern erkennen hier downloaden von git oder so
-
-echo "Setup abgeschlossen"
-read -n 1 -s
+case "$OS_TYPE" in
+    Linux*)
+        echo "Linux erkannt"
+        ./linux_setup   # hier dein Linux-Skript
+        ;;
+    Darwin*)
+        echo "macOS erkannt"
+        echo "macOS nicht supported (heheha)"
+        # ./macos_script.sh   # hier dein macOS-Skript
+        ;;
+    CYGWIN*|MINGW*|MSYS*)
+        echo "Windows erkannt"
+        ./windows_setup.sh   # Windows-Skript
+        ;;
+    *)
+        echo "Unbekanntes System: $OS_TYPE"
+        ;;
+esac

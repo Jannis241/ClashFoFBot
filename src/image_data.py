@@ -29,8 +29,8 @@ def train_model(model_name, data_set_type, epochen):
     model.train(
     data=DATA_YAML,
     epochs=epochen,
-    imgsz=960,
-    batch=16,                  # 16 passt meist auf 8GB VRAM (zur Not 8)
+    imgsz=640,
+    batch=4,                  # 16 passt meist auf 8GB VRAM (zur Not 8)
     workers=4,                 # CPU besser nutzen
     optimizer="SGD",           # stabiler als AdamW bei YOLO
     momentum=0.937,            # Standard-Optimalwert
@@ -43,7 +43,7 @@ def train_model(model_name, data_set_type, epochen):
     warmup_bias_lr=0.1,
     pretrained=True,
     amp=True,                  # Mixed Precision
-    device=0,
+    device='cuda:0',
 
     # Augmentation (deine Spezialsettings, nicht geändert):
     hsv_h=0.0,
@@ -60,13 +60,12 @@ def train_model(model_name, data_set_type, epochen):
     mixup=0.0,
     copy_paste=0.0,
 
-    save_period=10,
+    save_period=0,
     exist_ok=True,
     val=True,
     project="runs/detect",
     name=model_name,
     cache="ram",
-    ema=True,                  # stabilere final Weights
     cos_lr=True                # Cosine / OneCycle Scheduler
     )
 

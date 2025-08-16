@@ -26,6 +26,13 @@ target
 
 /target
 
+# temp damit nicht immer alles models gepusht werden
+/runs
+
+# runs/detect/*
+# !runs/detect/.empty
+# !runs/detect/*/weights/
+# !runs/detect/*/weights/best.pt
 
 /testvals
 /Communication
@@ -59,4 +66,5 @@ yolov8s.pt
 yolov8n.pt
 yolov8l.pt
 yolov8x.pt
+yolo11n.pt
 
