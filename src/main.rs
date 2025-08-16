@@ -81,22 +81,19 @@ fn check_unique_prefixes(class_names: &[String], prefix_len: usize) {
 
 use std::io::BufRead;
 
-fn main() {
-    // conflicts
-    // let file_content =
-    //     fs::read_to_string("dataset_buildings/data.yaml").expect("Kann Datei nicht lesen");
-    //
-    // let data: YamlData =
-    //     serde_yaml::from_str(&file_content).expect("Fehler beim Parsen der YAML-Datei");
-    //
-    // let class_names: Vec<String> = data.names.values().cloned().collect();
-    //
-    // let prefix_length = 3; // Anzahl der Buchstaben, die als Präfix geprüft werden
-    // check_unique_prefixes(&class_names, prefix_length);
+fn get_conflicts() {
+    let file_content =
+        fs::read_to_string("dataset_buildings/data.yaml").expect("Kann Datei nicht lesen");
 
-    // heheha goey
+    let data: YamlData =
+        serde_yaml::from_str(&file_content).expect("Fehler beim Parsen der YAML-Datei");
+
+    let class_names: Vec<String> = data.names.values().cloned().collect();
+
+    let prefix_length = 3; // Anzahl der Buchstaben, die als Präfix geprüft werden
+    check_unique_prefixes(&class_names, prefix_length);
+}
+
+fn main() {
     ui::start_ui();
-    // debug::run_tests();
-    // test
-    // test
 }

@@ -33,7 +33,7 @@ target
 # /dataset
 # /images
 # /todo.txt
-# /Communication
+/Communication
 
 dataset_buildings/labels/train.cache
           dataset_buildings/labels/val.cache
