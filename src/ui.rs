@@ -1000,7 +1000,7 @@ impl ScreenshotApp {
             {
                 if let Some(path) = rfd::FileDialog::new().pick_folder() {
                     self.screenshot_path =
-                        String::from_utf8(path.clone().as_os_str().as_bytes().to_vec()).unwrap();
+                        path.to_str().unwrap().to_string();
                     self.create_error("Speicher Ordner Geändert", MessageType::Success);
                 }
             }

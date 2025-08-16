@@ -31,3 +31,4 @@ pip3 install -r requirements.txt
 # Todo: diese python ding da für nummern erkennen hier downloaden von git oder so
 
 echo "Setup abgeschlossen"
+read -n 1 -s
