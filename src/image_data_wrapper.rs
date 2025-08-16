@@ -124,7 +124,7 @@ fn get_rating(model_name: &str) -> Result<f64, FofError> {
 }
 
 fn start_python(args: Vec<&str>) -> Result<String, FofError> {
-    match Command::new("python3").args(args).output() {
+    match Command::new("python").args(args).output() {
         Ok(output) if output.status.success() => {
             Ok(String::from_utf8_lossy(&output.stdout).to_string())
         }
@@ -261,7 +261,7 @@ pub fn start_training(model_name: &str, epochen: i32) -> Result<Child, FofError>
     let model_path = format!("runs/detect/{}", model_name);
     fs::metadata(&model_path).map_err(|_| FofError::ModelNotFound(model_name.to_string()))?;
 
-    let child = Command::new("python3")
+    let child = Command::new("python")
         .arg("src/image_data.py")
         .arg("--train")
         .arg("--model-name")
