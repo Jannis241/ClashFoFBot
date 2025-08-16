@@ -27,12 +27,7 @@ target
 /target
 
 
-# temp
-# /runs
 /testvals
-# /dataset
-# /images
-# /todo.txt
 /Communication
 
 dataset_buildings/labels/train.cache
