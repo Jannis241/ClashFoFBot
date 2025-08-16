@@ -29,40 +29,45 @@ def train_model(model_name, data_set_type, epochen):
     model.train(
     data=DATA_YAML,
     epochs=epochen,
-    imgsz=960,                 # Reicht meistens, 1280 wäre overkill
-    batch=1,                   # je nach VRAM
-         #accumulate=8, #nur für die ubutuntu user
-       # workers=1,
-    optimizer="AdamW",
-    lr0=0.001,
-    lrf=0.01,
+    imgsz=960,
+    batch=16,                  # 16 passt meist auf 8GB VRAM (zur Not 8)
+    workers=4,                 # CPU besser nutzen
+    optimizer="SGD",           # stabiler als AdamW bei YOLO
+    momentum=0.937,            # Standard-Optimalwert
+    lr0=0.01,                  # höherer Start-LR für SGD
+    lrf=0.01,                  # OneCycleLR fährt runter
     weight_decay=0.0005,
-    patience=round(epochen*0.3), #erstmal soll er undendlich lang trainieren
-    warmup_epochs=50,#round(epochen*0.05),
+    patience=round(epochen*0.3),
+    warmup_epochs=3,           # 2–5 ideal
+    warmup_momentum=0.8,
+    warmup_bias_lr=0.1,
     pretrained=True,
-    amp=True,
-    device=0, # geht nicht auf mac
+    amp=True,                  # Mixed Precision
+    device=0,
 
-    # Augmentation (angepasst!):
-    hsv_h=0.0,                 # Keine Farbanpassung!
+    # Augmentation (deine Spezialsettings, nicht geändert):
+    hsv_h=0.0,
     hsv_s=0.0,
     hsv_v=0.0,
-    degrees=0.0,               # Keine Rotation nötig
-    translate=0.05,            # Leichte Verschiebung erlaubt
-    scale=0.9,                 # Wenig Skalierung
-    shear=0.0,                 # Keine Scherung
-    perspective=0.0,           # Keine Verzerrung
-    flipud=0.0,                # Kein vertikales Flip
-    fliplr=0.2,                # Nur horizontales Flip (wenn sinnvoll)
-    mosaic=0.5,                # Optional – hilft evtl. bei Generalisierung
-    mixup=0.0,                 # Nicht sinnvoll bei UI-Bildern
-    copy_paste=0.0,            # Ebenfalls ungeeignet
+    degrees=0.0,
+    translate=0.05,
+    scale=0.9,
+    shear=0.0,
+    perspective=0.0,
+    flipud=0.0,
+    fliplr=0.2,
+    mosaic=0.5,
+    mixup=0.0,
+    copy_paste=0.0,
 
     save_period=10,
     exist_ok=True,
     val=True,
     project="runs/detect",
     name=model_name,
+    cache="ram",
+    ema=True,                  # stabilere final Weights
+    cos_lr=True                # Cosine / OneCycle Scheduler
     )
 
 
