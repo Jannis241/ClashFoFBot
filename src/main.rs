@@ -27,7 +27,7 @@ pub enum FofError {
     DivisionByZero, // wenn man z.B get avg confidence aufruft aber einen leeren Vec an buildings
     ModelAlreadyExists, // wenn man ein model erstellen will, was es schon gibt
     YoloModelNotFound, // Wenn man ein invalies base model angibt und er es nicht findet.
-    PythonError(Vec<u8>), // Wenn es in dem python script einen Error gibt
+    PythonError(String), // Wenn es in dem python script einen Error gibt
     FailedToStartPython, // Wenn es probleme gibt imaga_data.py zu starten
     ModelNotFound(String), // Wenn man versucht ein Modell zu löschen oder zu trainieren welches es nciht gibt. String
     JsonParseError(String),

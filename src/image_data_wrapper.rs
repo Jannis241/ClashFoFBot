@@ -2,7 +2,7 @@ use std::fmt::format;
 
 use crate::prelude::*;
 
-#[derive(Debug, PartialEq, EnumIter, Display, Eq, Clone)]
+#[derive(Debug, PartialEq, EnumIter, Eq, Clone)]
 pub enum YoloModel {
     YOLOv8n,
     YOLOv8s,
@@ -14,6 +14,27 @@ pub enum YoloModel {
 pub enum DatasetType {
     Buildings,
     Level,
+}
+impl ToString for YoloModel {
+    fn to_string(&self) -> String {
+        match self {
+            YoloModel::YOLOv8n => {
+                return "yolov8n".to_string();
+            }
+            YoloModel::YOLOv8s => {
+                return "yolov8s".to_string();
+            }
+            YoloModel::YOLOv8m => {
+                return "yolov8m".to_string();
+            }
+            YoloModel::YOLOv8l => {
+                return "yolov8l".to_string();
+            }
+            YoloModel::YOLOv8x => {
+                return "yolov8x".to_string();
+            }
+        }
+    }
 }
 
 impl ToString for DatasetType {
@@ -107,7 +128,9 @@ fn start_python(args: Vec<&str>) -> Result<String, FofError> {
         Ok(output) if output.status.success() => {
             Ok(String::from_utf8_lossy(&output.stdout).to_string())
         }
-        Ok(output) => Err(FofError::PythonError(output.stderr)),
+        Ok(output) => Err(FofError::PythonError(
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        )),
         Err(e) => Err(FofError::FailedToStartPython),
     }
 }
@@ -211,12 +234,12 @@ pub fn create_model(
         yolo_model_string.as_str(),
         "--model-name",
         model_name,
-        "--dataset-type",
+        "--dataset_type",
         dataset_type.as_str(),
     ];
 
-    let python_output = start_python(args)?;
-    println!("Python output: {}", python_output);
+    let python_output = start_python(args);
+    println!("Python output: {:?}", python_output);
 
     return Ok(());
 }

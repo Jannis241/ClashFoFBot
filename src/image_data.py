@@ -16,7 +16,7 @@ def create_new_model(model_name, data_set_type, yolo_model):
         DATA_YAML = "dataset_buildings/data.yaml"
     else:
         DATA_YAML = "dataset_level/data.yaml"
-    model.train(data=DATA_YAML, epochs=1, name=model_name, augment=True)
+    model.train(data=DATA_YAML, epochs=1, name=model_name)
 
 def train_model(model_name, data_set_type, epochen):
     model_path = f"runs/detect/{model_name}/weights/best.pt"
