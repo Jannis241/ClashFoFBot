@@ -62,12 +62,5 @@ __pycache__/
 *.tmp
 *.swp
 
-
-yolov8m.pt
-yolov8s.pt
-yolov8n.pt
-yolov8l.pt
-yolov8x.pt
-yolo11n.pt
 yolo*
 
