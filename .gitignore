@@ -27,10 +27,12 @@ target
 /target
 
 # temp damit nicht immer alles models gepusht werden
-/runs
+/runs/detect/*
+!runs/detect/.empty
 
-# runs/detect/*
-# !runs/detect/.empty
+
+
+#runs/detect/*
 # !runs/detect/*/weights/
 # !runs/detect/*/weights/best.pt
 
