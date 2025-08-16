@@ -28,10 +28,10 @@ target
 
 # temp damit nicht immer alles models gepusht werden
 /runs/detect/*
+
+
+
 !runs/detect/.empty
-
-
-
 #runs/detect/*
 # !runs/detect/*/weights/
 # !runs/detect/*/weights/best.pt
@@ -69,4 +69,5 @@ yolov8n.pt
 yolov8l.pt
 yolov8x.pt
 yolo11n.pt
+yolo*
 
